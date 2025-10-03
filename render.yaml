@@ -1,0 +1,23 @@
+# Render deployment configuration
+
+services:
+  - type: static_site
+    name: spacial-ocr-canvas
+    env: static
+    buildCommand: npm install && npm run build
+    publishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://cooldan-spacial-server-api.hf.space
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+
