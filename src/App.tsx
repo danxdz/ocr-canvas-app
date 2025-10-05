@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Upload, RotateCcw, Download, Send, Eye, EyeOff, Hash, Sliders } from 'lucide-react';
+import { Upload, RotateCcw, Download, Send, Eye, EyeOff, Hash, Sliders, FileText } from 'lucide-react';
 import { ZoneCanvas } from './components/ZoneCanvas';
 import { ZoneList } from './components/ZoneList';
 import { ocrAPI } from './services/api';
@@ -27,24 +27,42 @@ function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setImage(file);
-    setStatus('Loading image...');
-    
-    // Display image
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImageSrc(reader.result as string);
+    try {
+      // Validate file before processing
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        throw new Error('File too large. Maximum size is 10MB.');
+      }
       
-      // Load image element for cropping later
-      const img = new Image();
-      img.onload = () => {
-        imageRef.current = img;
-        // Auto-detect zones
-        autoDetectZones(file);
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp', 'image/tiff', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        throw new Error(`Unsupported file type. Allowed types: ${allowedTypes.join(', ')}`);
+      }
+
+      setImage(file);
+      setStatus('Loading image...');
+      
+      // Display image
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImageSrc(reader.result as string);
+        
+        // Load image element for cropping later
+        const img = new Image();
+        img.onload = () => {
+          imageRef.current = img;
+          // Auto-detect zones
+          autoDetectZones(file);
+        };
+        img.src = reader.result as string;
       };
-      img.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Upload error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setStatus(`Error: ${errorMessage}`);
+      setImageSrc('');
+      setZones([]);
+    }
   };
 
   const autoDetectZones = async (file: File) => {
@@ -91,7 +109,9 @@ function App() {
       
     } catch (error) {
       console.error('Auto-detect error:', error);
-      setStatus(`❌ Error: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setStatus(`❌ Error: ${errorMessage}`);
+      setZones([]); // Clear zones on error
     } finally {
       setLoading(false);
     }
@@ -207,9 +227,31 @@ function App() {
   };
 
   const handleZoneUpdate = (zoneId: string, updates: Partial<Zone>) => {
-    setZones(zones.map(zone => 
-      zone.id === zoneId ? { ...zone, ...updates } : zone
-    ));
+    console.log('🔄 handleZoneUpdate called for zone:', zoneId, 'updates:', updates);
+    
+    setZones(zones.map(zone => {
+      if (zone.id === zoneId) {
+        const updatedZone = { ...zone, ...updates };
+        
+        // If bbox was updated, ensure width and height are recalculated
+        if (updates.bbox) {
+          const { x1, y1, x2, y2 } = updatedZone.bbox;
+          const newWidth = x2 - x1;
+          const newHeight = y2 - y1;
+          
+          console.log('📏 Bbox update - old:', zone.bbox, 'new:', { x1, y1, x2, y2, width: newWidth, height: newHeight });
+          
+          updatedZone.bbox = {
+            ...updatedZone.bbox,
+            width: newWidth,
+            height: newHeight
+          };
+        }
+        
+        return updatedZone;
+      }
+      return zone;
+    }));
   };
 
   const handleZoneDelete = (zoneId: string) => {
@@ -350,9 +392,60 @@ function App() {
       );
       
       setStatus('✅ Exported successfully!');
+      
+      // Clear memory after export
+      setTimeout(() => {
+        if ((window as any).gc) {
+          (window as any).gc();
+        }
+      }, 1000);
     } catch (error) {
       console.error('Export error:', error);
-      setStatus(`❌ Export failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setStatus(`❌ Export failed: ${errorMessage}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (zones.length === 0 || !image) {
+      alert('No zones to export or no image loaded');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setStatus('📄 Generating PDF report...');
+      
+      // Get part number from user (default to Part 1)
+      const partNumber = prompt('Enter part number (e.g., Part 1, Part 2):', 'Part 1') || 'Part 1';
+      const title = `OCR Measurement Report - ${partNumber}`;
+      
+      // Export PDF using the API
+      const pdfBlob = await ocrAPI.exportPDF(image, zones, title, partNumber);
+      
+      // Create download link
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${partNumber.replace(/\s+/g, '_')}_measurement_report.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      setStatus('✅ PDF report downloaded successfully!');
+      
+      // Clear status after 3 seconds
+      setTimeout(() => setStatus(''), 3000);
+      
+    } catch (error) {
+      console.error('PDF export error:', error);
+      setStatus(`❌ PDF export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Clear status after 5 seconds
+      setTimeout(() => setStatus(''), 5000);
     } finally {
       setLoading(false);
     }
@@ -546,6 +639,16 @@ function App() {
                     <Download size={18} />
                     Export JSON
                   </button>
+                  
+                  <button
+                    onClick={handleExportPDF}
+                    disabled={zones.length === 0 || loading}
+                    title="Export PDF with image, bubbles, and tolerance grid"
+                  >
+                    <FileText size={18} />
+                    Export PDF
+                  </button>
+                  
                   <button
                     onClick={handleSendToTelegram}
                     disabled={zones.length === 0 || loading}

@@ -1,7 +1,7 @@
 // Zone list component showing all detected zones
 
 import { useEffect, useState } from 'react';
-import { RotateCw, Maximize2, Trash2 } from 'lucide-react';
+import { RotateCw, Maximize2, Trash2, RefreshCw } from 'lucide-react';
 import type { Zone } from '../types';
 
 interface ZoneListProps {
@@ -128,11 +128,6 @@ export function ZoneList({
                 <div className="zone-text">{zone.text}</div>
                 <div className="zone-meta">
                   <span className="zone-confidence">{confidence}% conf</span>
-                  {zone.rotation && Math.abs(zone.rotation) > 5 && (
-                    <span className="zone-rotation" title="Text rotation angle">
-                      <RotateCw size={12} /> {Math.round(zone.rotation)}°
-                    </span>
-                  )}
                   {zone.text_orientation && Math.abs(zone.text_orientation) > 5 && (
                     <span className="zone-rotation" title="Text orientation">
                       ↻ {Math.round(zone.text_orientation)}°
@@ -142,6 +137,18 @@ export function ZoneList({
               </div>
               
               <div className="zone-actions">
+                {onZoneReOcr && (
+                  <button
+                    className="zone-re-ocr"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onZoneReOcr(zone.id);
+                    }}
+                    title="Re-OCR this zone"
+                  >
+                    <RefreshCw size={14} />
+                  </button>
+                )}
                 {onZoneFit && (
                   <button
                     className="zone-fit"
@@ -149,7 +156,7 @@ export function ZoneList({
                       e.stopPropagation();
                       onZoneFit(zone.id);
                     }}
-                    title="Fit box tightly to text"
+                    title="Re-fit box tightly to text"
                   >
                     <Maximize2 size={14} />
                   </button>

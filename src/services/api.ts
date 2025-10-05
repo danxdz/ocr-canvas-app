@@ -77,6 +77,12 @@ export const ocrAPI = {
     if (imageFile.size > 10 * 1024 * 1024) { // 10MB limit
       throw new Error('File too large: maximum size is 10MB');
     }
+    
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp', 'image/tiff', 'image/webp'];
+    if (!allowedTypes.includes(imageFile.type)) {
+      throw new Error(`Unsupported file type: ${imageFile.type}. Allowed types: ${allowedTypes.join(', ')}`);
+    }
 
     const formData = new FormData();
     formData.append('file', imageFile);
@@ -250,6 +256,51 @@ export const ocrAPI = {
     } catch (error) {
       console.error('Error sending to Telegram:', error);
       return false;
+    }
+  },
+
+  /**
+   * Export PDF report with image, bubbles, and tolerance grid
+   */
+  async exportPDF(
+    imageFile: File,
+    zones: Zone[],
+    title: string = "OCR Measurement Report",
+    partNumber: string = "Part 1"
+  ): Promise<Blob> {
+    // Validate inputs
+    if (!imageFile || imageFile.size === 0) {
+      throw new Error('Invalid image file');
+    }
+    
+    if (!Array.isArray(zones)) {
+      throw new Error('Invalid zones data');
+    }
+
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    formData.append('zones', JSON.stringify(zones));
+    formData.append('title', title);
+    formData.append('part_number', partNumber);
+
+    try {
+      const response = await fetchWithRetry(`${API_URL}/export/pdf`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorMessage = await parseErrorResponse(response);
+        throw new Error(`PDF export failed: ${errorMessage}`);
+      }
+
+      // Return the PDF blob
+      return await response.blob();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Unknown error occurred during PDF export');
     }
   },
 

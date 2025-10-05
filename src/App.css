@@ -330,6 +330,7 @@ body {
   align-items: center;
 }
 
+.zone-re-ocr,
 .zone-fit,
 .zone-rotate,
 .zone-delete {
@@ -344,6 +345,7 @@ body {
   color: var(--text-secondary);
 }
 
+.zone-re-ocr:hover,
 .zone-fit:hover,
 .zone-rotate:hover {
   opacity: 1;
@@ -759,6 +761,7 @@ body {
     gap: 2px;
   }
   
+  .zone-re-ocr,
   .zone-fit,
   .zone-rotate,
   .zone-delete {
