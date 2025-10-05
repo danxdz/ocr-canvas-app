@@ -227,13 +227,14 @@ function App() {
       setLoading(true);
       setStatus(`Re-OCR zone: "${zone.text}"...`);
 
-      // Calculate center of zone
+      // Use the current resized bounding box for rectangle OCR
       const { x1, y1, x2, y2 } = zone.bbox;
-      const centerX = (x1 + x2) / 2;
-      const centerY = (y1 + y2) / 2;
+      const rectangleBounds = { x1, y1, x2, y2 };
 
-      // Re-run OCR on this area with hardcore mode
-      const result = await ocrAPI.findTextAtPoint(imageSrc, centerX, centerY);
+      console.log('🔄 Re-OCR: Using rectangle bounds:', rectangleBounds);
+
+      // Re-run OCR on this rectangle area with hardcore mode
+      const result = await ocrAPI.findTextInRectangle(imageSrc, rectangleBounds, zone.rotation || 0);
 
       if (result) {
         // Update the zone with new OCR result
@@ -292,25 +293,30 @@ function App() {
       // Rotate the zone 90 degrees clockwise
       const newRotation = ((zone.rotation || 0) + 90) % 360;
       
-      // Re-OCR the zone with the new rotation
-      const result = await ocrAPI.findTextAtPoint(
-        imageSrc,
-        zone.bbox.x1 + (zone.bbox.x2 - zone.bbox.x1) / 2,
-        zone.bbox.y1 + (zone.bbox.y2 - zone.bbox.y1) / 2
-      );
+      // Use the current resized bounding box for rectangle OCR
+      const { x1, y1, x2, y2 } = zone.bbox;
+      const rectangleBounds = { x1, y1, x2, y2 };
+
+      console.log('🔄 Rotate: Using rectangle bounds:', rectangleBounds, 'with rotation:', newRotation);
+      
+      // Re-OCR the zone with the new rotation using rectangle mode
+      const result = await ocrAPI.findTextInRectangle(imageSrc, rectangleBounds, newRotation);
 
       if (result) {
         setZones(zones.map(z =>
           z.id === zoneId
             ? {
                 ...z,
-                ...result,
+                // Only update text, confidence, and rotation - keep original bounding box
+                text: result.text || z.text,
+                confidence: result.confidence || z.confidence,
                 rotation: newRotation,
+                text_orientation: newRotation,
                 id: zoneId // Keep the same ID
               }
             : z
         ));
-        setStatus(`Zone rotated to ${newRotation}° and re-OCRed`);
+        setStatus(`Zone rotated to ${newRotation}° and re-OCRed (box size preserved)`);
       } else {
         setStatus('No text found after rotation');
       }

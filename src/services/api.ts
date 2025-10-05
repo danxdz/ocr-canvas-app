@@ -163,7 +163,7 @@ export const ocrAPI = {
   /**
    * Find text within a rectangle area (drag to find)
    */
-  async findTextInRectangle(imageDataUrl: string, rectangleBounds: { x1: number, y1: number, x2: number, y2: number }): Promise<Zone | null> {
+  async findTextInRectangle(imageDataUrl: string, rectangleBounds: { x1: number, y1: number, x2: number, y2: number }, rotation: number = 0): Promise<Zone | null> {
     // Validate inputs
     if (!imageDataUrl || typeof imageDataUrl !== 'string') {
       throw new Error('Invalid image data URL');
@@ -197,6 +197,7 @@ export const ocrAPI = {
           },
           rectangle_bounds: rectangleBounds,
           use_rectangle: true,
+          rotation: rotation,
         }),
       });
 

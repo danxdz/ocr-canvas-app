@@ -43,9 +43,30 @@ export function ZoneList({
         const { x1, y1, x2, y2 } = zone.bbox;
         const width = x2 - x1;
         const height = y2 - y1;
+        
+        // Get rotation angle (prefer text_orientation, fallback to rotation)
+        const angle = zone.text_orientation || zone.rotation || 0;
+        const roundedAngle = Math.round(angle / 90) * 90; // Round to nearest 90 degrees
+        
+        // Set canvas size based on rotation
+        if (Math.abs(roundedAngle) === 90 || Math.abs(roundedAngle) === 270) {
+          // For 90° and 270° rotation, swap width and height
+          canvas.width = height;
+          canvas.height = width;
+        } else {
+          canvas.width = width;
+          canvas.height = height;
+        }
 
-        canvas.width = width;
-        canvas.height = height;
+        // Apply rotation if needed
+        if (Math.abs(roundedAngle) > 0) {
+          // Move to center of canvas
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          // Rotate
+          ctx.rotate((roundedAngle * Math.PI) / 180);
+          // Move back to draw the image
+          ctx.translate(-width / 2, -height / 2);
+        }
 
         // Draw cropped zone
         ctx.drawImage(img, x1, y1, width, height, 0, 0, width, height);
@@ -84,36 +105,24 @@ export function ZoneList({
             >
               <div className="zone-badge">#{index + 1}</div>
               
-              {thumbnail && (() => {
-                // Get rotation angle (prefer text_orientation, fallback to rotation)
-                const angle = zone.text_orientation || zone.rotation || 0;
-                // Only apply rotation if it's significant (more than 45 degrees)
-                // This prevents horizontal text from appearing vertical
-                const shouldRotate = Math.abs(angle) > 45;
-                const roundedAngle = shouldRotate ? Math.round(angle / 30) * 30 : 0;
-                
-                return (
-                  <div 
-                    className="zone-thumbnail"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onZoneReOcr) {
-                        onZoneReOcr(zone.id);
-                      }
-                    }}
-                    title="Click to re-OCR this zone with better accuracy"
-                  >
-                    <img 
-                      src={thumbnail} 
-                      alt={zone.text}
-                      style={{
-                        transform: roundedAngle !== 0 ? `rotate(${roundedAngle}deg)` : undefined
-                      }}
-                    />
-                    <div className="thumbnail-overlay"><RotateCw size={14} /></div>
-                  </div>
-                );
-              })()}
+              {thumbnail && (
+                <div 
+                  className="zone-thumbnail"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onZoneRotate) {
+                      onZoneRotate(zone.id);
+                    }
+                  }}
+                  title="Click to rotate thumbnail and re-OCR with better accuracy"
+                >
+                  <img 
+                    src={thumbnail} 
+                    alt={zone.text}
+                  />
+                  <div className="thumbnail-overlay"><RotateCw size={14} /></div>
+                </div>
+              )}
               
               <div className="zone-content">
                 <div className="zone-text">{zone.text}</div>
