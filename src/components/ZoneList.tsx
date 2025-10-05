@@ -1,6 +1,7 @@
 // Zone list component showing all detected zones
 
 import { useEffect, useState } from 'react';
+import { RotateCw, Maximize2, Trash2 } from 'lucide-react';
 import type { Zone } from '../types';
 
 interface ZoneListProps {
@@ -10,6 +11,7 @@ interface ZoneListProps {
   onZoneDelete: (zoneId: string) => void;
   onZoneReOcr?: (zoneId: string) => void;
   onZoneFit?: (zoneId: string) => void;
+  onZoneRotate?: (zoneId: string) => void;
   imageSrc?: string;
 }
 
@@ -20,6 +22,7 @@ export function ZoneList({
   onZoneDelete,
   onZoneReOcr,
   onZoneFit,
+  onZoneRotate,
   imageSrc,
 }: ZoneListProps) {
   const [zoneThumbnails, setZoneThumbnails] = useState<Record<string, string>>({});
@@ -84,8 +87,10 @@ export function ZoneList({
               {thumbnail && (() => {
                 // Get rotation angle (prefer text_orientation, fallback to rotation)
                 const angle = zone.text_orientation || zone.rotation || 0;
-                // Round to nearest 30 degrees
-                const roundedAngle = Math.round(angle / 30) * 30;
+                // Only apply rotation if it's significant (more than 45 degrees)
+                // This prevents horizontal text from appearing vertical
+                const shouldRotate = Math.abs(angle) > 45;
+                const roundedAngle = shouldRotate ? Math.round(angle / 30) * 30 : 0;
                 
                 return (
                   <div 
@@ -105,7 +110,7 @@ export function ZoneList({
                         transform: roundedAngle !== 0 ? `rotate(${roundedAngle}deg)` : undefined
                       }}
                     />
-                    <div className="thumbnail-overlay">🔄</div>
+                    <div className="thumbnail-overlay"><RotateCw size={14} /></div>
                   </div>
                 );
               })()}
@@ -116,7 +121,7 @@ export function ZoneList({
                   <span className="zone-confidence">{confidence}% conf</span>
                   {zone.rotation && Math.abs(zone.rotation) > 5 && (
                     <span className="zone-rotation" title="Text rotation angle">
-                      🔄 {Math.round(zone.rotation)}°
+                      <RotateCw size={12} /> {Math.round(zone.rotation)}°
                     </span>
                   )}
                   {zone.text_orientation && Math.abs(zone.text_orientation) > 5 && (
@@ -137,7 +142,19 @@ export function ZoneList({
                     }}
                     title="Fit box tightly to text"
                   >
-                    📐
+                    <Maximize2 size={14} />
+                  </button>
+                )}
+                {onZoneRotate && (
+                  <button
+                    className="zone-rotate"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onZoneRotate(zone.id);
+                    }}
+                    title="Rotate and re-OCR this zone"
+                  >
+                    <RotateCw size={14} />
                   </button>
                 )}
                 <button
@@ -148,7 +165,7 @@ export function ZoneList({
                   }}
                   title="Delete zone"
                 >
-                  🗑️
+                  <Trash2 size={14} />
                 </button>
               </div>
             </div>

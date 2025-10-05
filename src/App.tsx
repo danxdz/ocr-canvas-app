@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { Upload, RotateCcw, Download, Send, Eye, EyeOff, Hash, Sliders } from 'lucide-react';
 import { ZoneCanvas } from './components/ZoneCanvas';
 import { ZoneList } from './components/ZoneList';
 import { ocrAPI } from './services/api';
@@ -12,8 +13,13 @@ function App() {
   const [zones, setZones] = useState<Zone[]>([]);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<string>('');
+  const [status, setStatus] = useState<string>('Ready - v1.2.3 (Hard refresh if no changes visible)');
   const [showOverlay, setShowOverlay] = useState(false); // Toggle for white box overlay
+  const [showBalloons, setShowBalloons] = useState(true); // Toggle for number balloons
+  const [showImageControls, setShowImageControls] = useState(false); // Toggle for image adjustment panel
+  const [brightness, setBrightness] = useState(100);
+  const [contrast, setContrast] = useState(100);
+  const [sharpness, setSharpness] = useState(100);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
 
@@ -47,7 +53,9 @@ function App() {
       setStatus('🔍 Auto-detecting zones...');
       
       // First scan: Get zones with orientations (no rotation)
+      console.log('🚀 Client: Starting auto-detection OCR processing...');
       const result = await ocrAPI.processImage(file, 'hardcore', 0);
+      console.log('🚀 Client: Received auto-detection response:', result);
       
       // Convert zones to our format
       const detectedZones: Zone[] = result.zones.map((zone, idx) => ({
@@ -134,7 +142,7 @@ function App() {
     }
   };
 
-  const handleCanvasClick = async (x: number, y: number) => {
+  const handleCanvasClick = async (x: number, y: number, rectangleData?: { rectangleBounds: { x1: number, y1: number, x2: number, y2: number }, width: number, height: number }) => {
     if (!imageSrc || loading) return;
 
     // Check if click is inside an existing zone
@@ -153,9 +161,18 @@ function App() {
     // Normal click-to-find on empty area
     try {
       setLoading(true);
-      setStatus(`Finding text at (${Math.round(x)}, ${Math.round(y)})...`);
-      
-      const zone = await ocrAPI.findTextAtPoint(imageSrc, x, y);
+      let zone;
+      if (rectangleData) {
+        setStatus(`Finding text in rectangle (${Math.round(rectangleData.rectangleBounds.x1)}, ${Math.round(rectangleData.rectangleBounds.y1)}) to (${Math.round(rectangleData.rectangleBounds.x2)}, ${Math.round(rectangleData.rectangleBounds.y2)})...`);
+        console.log('📐 Client: Sending rectangle OCR request:', rectangleData.rectangleBounds);
+        zone = await ocrAPI.findTextInRectangle(imageSrc, rectangleData.rectangleBounds);
+        console.log('📐 Client: Received rectangle OCR response:', zone);
+      } else {
+        setStatus(`Finding text at (${Math.round(x)}, ${Math.round(y)})...`);
+        console.log('🎯 Client: Sending point OCR request:', { x, y });
+        zone = await ocrAPI.findTextAtPoint(imageSrc, x, y);
+        console.log('🎯 Client: Received point OCR response:', zone);
+      }
       
       if (zone) {
         const newZone: Zone = {
@@ -258,6 +275,53 @@ function App() {
     await handleZoneReOcr(zoneId);
   };
 
+  const handleTextEdit = (zoneId: string, newText: string) => {
+    setZones(zones.map(z =>
+      z.id === zoneId ? { ...z, text: newText } : z
+    ));
+  };
+
+  const handleZoneRotate = async (zoneId: string) => {
+    const zone = zones.find(z => z.id === zoneId);
+    if (!zone || !imageSrc) return;
+
+    setLoading(true);
+    setStatus('Rotating and re-OCRing zone...');
+
+    try {
+      // Rotate the zone 90 degrees clockwise
+      const newRotation = ((zone.rotation || 0) + 90) % 360;
+      
+      // Re-OCR the zone with the new rotation
+      const result = await ocrAPI.findTextAtPoint(
+        imageSrc,
+        zone.bbox.x1 + (zone.bbox.x2 - zone.bbox.x1) / 2,
+        zone.bbox.y1 + (zone.bbox.y2 - zone.bbox.y1) / 2
+      );
+
+      if (result) {
+        setZones(zones.map(z =>
+          z.id === zoneId
+            ? {
+                ...z,
+                ...result,
+                rotation: newRotation,
+                id: zoneId // Keep the same ID
+              }
+            : z
+        ));
+        setStatus(`Zone rotated to ${newRotation}° and re-OCRed`);
+      } else {
+        setStatus('No text found after rotation');
+      }
+    } catch (error) {
+      console.error('Rotate error:', error);
+      setStatus('Failed to rotate and re-OCR zone');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleExportJSON = async () => {
     if (!imageRef.current || zones.length === 0) {
       alert('No zones to export');
@@ -338,13 +402,64 @@ function App() {
               className="upload-button"
               onClick={() => fileInputRef.current?.click()}
             >
-              📤 Upload Technical Drawing
+              <Upload size={20} />
+              Upload Technical Drawing
             </button>
           </div>
         ) : (
           <>
             <div className="canvas-section">
-              <div className="canvas-wrapper">
+              {showImageControls && (
+                <div className="image-controls-panel">
+                  <div className="control-slider">
+                    <label>Brightness: {brightness}%</label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="150"
+                      value={brightness}
+                      onChange={(e) => setBrightness(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="control-slider">
+                    <label>Contrast: {contrast}%</label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="150"
+                      value={contrast}
+                      onChange={(e) => setContrast(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="control-slider">
+                    <label>Sharpness: {sharpness}%</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="200"
+                      value={sharpness}
+                      onChange={(e) => setSharpness(Number(e.target.value))}
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      setBrightness(100);
+                      setContrast(100);
+                      setSharpness(100);
+                    }}
+                    className="reset-button"
+                  >
+                    Reset
+                  </button>
+                </div>
+              )}
+              <div 
+                className="canvas-wrapper"
+                style={{
+                  filter: `brightness(${brightness}%) contrast(${contrast}%)`,
+                  imageRendering: sharpness > 100 ? 'crisp-edges' : 'auto'
+                }}
+              >
                 <ZoneCanvas
                   imageSrc={imageSrc}
                   zones={zones}
@@ -355,6 +470,8 @@ function App() {
                   onCanvasClick={handleCanvasClick}
                   onZoneResize={handleZoneReOcr}
                   showOverlay={showOverlay}
+                  onTextEdit={handleTextEdit}
+                  showBalloons={showBalloons}
                 />
               </div>
 
@@ -371,7 +488,8 @@ function App() {
                       fileInputRef.current.value = '';
                     }
                   }}>
-                    📤 New Image
+                    <Upload size={18} />
+                    New Image
                   </button>
                   
                   <button
@@ -379,7 +497,8 @@ function App() {
                     disabled={!image || loading}
                     title="Re-run auto-detection with OCR improvement"
                   >
-                    🔍 Re-detect
+                    <RotateCcw size={18} />
+                    Re-detect
                   </button>
                 </div>
 
@@ -390,7 +509,26 @@ function App() {
                     title={showOverlay ? "Hide OCR overlay" : "Show OCR text as white overlay"}
                     className={showOverlay ? 'active' : ''}
                   >
-                    {showOverlay ? '👁️ Hide Overlay' : '👁️‍🗨️ Show Overlay'}
+                    {showOverlay ? <><EyeOff size={18} /> Hide Overlay</> : <><Eye size={18} /> Show Overlay</>}
+                  </button>
+                  
+                  <button
+                    onClick={() => setShowBalloons(!showBalloons)}
+                    title={showBalloons ? "Hide zone numbers" : "Show zone numbers"}
+                    className={showBalloons ? 'active' : ''}
+                  >
+                    <Hash size={18} />
+                    {showBalloons ? 'Hide Numbers' : 'Show Numbers'}
+                  </button>
+                  
+                  <button
+                    onClick={() => setShowImageControls(!showImageControls)}
+                    disabled={!image}
+                    title="Image adjustments for better OCR"
+                    className={showImageControls ? 'active' : ''}
+                  >
+                    <Sliders size={18} />
+                    Adjust
                   </button>
                 </div>
 
@@ -399,13 +537,15 @@ function App() {
                     onClick={handleExportJSON}
                     disabled={zones.length === 0 || loading}
                   >
-                    📥 Export JSON
+                    <Download size={18} />
+                    Export JSON
                   </button>
                   <button
                     onClick={handleSendToTelegram}
                     disabled={zones.length === 0 || loading}
                   >
-                    📤 Send to Telegram
+                    <Send size={18} />
+                    Send to Telegram
                   </button>
                 </div>
               </div>
@@ -419,15 +559,16 @@ function App() {
             </div>
 
             <div className="zones-section">
-              <ZoneList
-                zones={zones}
-                selectedZoneId={selectedZoneId}
-                onZoneSelect={setSelectedZoneId}
-                onZoneDelete={handleZoneDelete}
-                onZoneReOcr={handleZoneReOcr}
-                onZoneFit={handleZoneFit}
-                imageSrc={imageSrc}
-              />
+            <ZoneList
+              zones={zones}
+              selectedZoneId={selectedZoneId}
+              onZoneSelect={setSelectedZoneId}
+              onZoneDelete={handleZoneDelete}
+              onZoneReOcr={handleZoneReOcr}
+              onZoneFit={handleZoneFit}
+              onZoneRotate={handleZoneRotate}
+              imageSrc={imageSrc}
+            />
             </div>
           </>
         )}

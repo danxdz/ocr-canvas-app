@@ -126,3 +126,46 @@ app.add_middleware(
 
 MIT
 
+{
+    "id": "ocr_zone_0",
+    "text": "65",
+    "confidence": 0.9989255666732788,
+    "bbox": {
+        "x1": 320,
+        "y1": 35,
+        "x2": 361,
+        "y2": 67,
+        "width": 41,
+        "height": 32
+    },
+    "polygon": [
+        [
+            320,
+            35
+        ],
+        [
+            361,
+            35
+        ],
+        [
+            361,
+            67
+        ],
+        [
+            320,
+            67
+        ]
+    ],
+    "text_orientation": 90,
+    "is_dimension": true,
+    "tolerance_info": {
+        "value": 65,
+        "tolerance_plus": 0,
+        "tolerance_minus": 0,
+        "tolerance_type": "none",
+        "is_diameter": false,
+        "original_text": "65"
+    },
+    "original_text": "65",
+    "was_corrected": false
+}
