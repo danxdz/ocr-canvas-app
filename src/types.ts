@@ -26,6 +26,7 @@ export interface Zone {
     tolerance_plus?: number;
     tolerance_minus?: number;
     tolerance_type?: string;
+    tolerance_class?: string;
     is_diameter?: boolean;
     middle_value?: number;
   };
