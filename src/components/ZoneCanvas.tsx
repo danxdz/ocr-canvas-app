@@ -60,6 +60,7 @@ export function ZoneCanvas({
   const [cursor, setCursor] = useState('crosshair');
   const [draggingBubble, setDraggingBubble] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>('');
+  const [localZoneUpdates, setLocalZoneUpdates] = useState<Record<string, Partial<Zone>>>({});
   const [hoveredZoneForCard, setHoveredZoneForCard] = useState<Zone | null>(null);
   const [cardPosition, setCardPosition] = useState<{ x: number; y: number } | null>(null);
   const [isHoveringCard, setIsHoveringCard] = useState(false);
@@ -174,6 +175,8 @@ export function ZoneCanvas({
     const img = imageRef.current;
     if (!canvas || !img) return;
 
+    // Canvas redraw
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
@@ -184,11 +187,17 @@ export function ZoneCanvas({
     // Draw image
     ctx.drawImage(img, 0, 0);
 
-    // Draw zones using memoized values
+    // Draw zones using memoized values with local updates
     memoizedZones.forEach((zone, index) => {
-      const { x1, y1, x2, y2 } = zone.bbox;
-      const isSelected = zone.id === memoizedSelectedZoneId;
-      const isHovered = zone.id === memoizedHoveredZoneId;
+      // Apply local updates if they exist (for immediate visual feedback)
+      const localUpdate = localZoneUpdates[zone.id];
+      const effectiveZone = localUpdate ? { ...zone, ...localUpdate } : zone;
+      
+      // Use effective zone coordinates for drawing
+      
+      const { x1, y1, x2, y2 } = effectiveZone.bbox;
+      const isSelected = effectiveZone.id === memoizedSelectedZoneId;
+      const isHovered = effectiveZone.id === memoizedHoveredZoneId;
 
       if (showOverlay) {
         // OVERLAY MODE: Draw white opaque boxes with black OCR text
@@ -348,8 +357,6 @@ export function ZoneCanvas({
         const btnX = x2 - btnSize; // Aligned to right border (inside)
         const btnY = y1 - offset - btnSize; // Outside top border
         
-        console.log(`🗑️ Drawing delete button for zone ${zone.id} at`, { btnX, btnY, btnSize }, 'hovered:', isHovered);
-        
         // Draw square button background
         ctx.fillStyle = 'rgba(255, 59, 48, 0.95)';
         ctx.fillRect(btnX, btnY, btnSize, btnSize);
@@ -390,14 +397,14 @@ export function ZoneCanvas({
       ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
       ctx.setLineDash([]);
     }
-  }, [memoizedZones, memoizedSelectedZoneId, memoizedHoveredZoneId, debouncedMousePos, showOverlay, showBalloons, isDraggingZone, isDrawingRectangle, rectangleStart]);
+  }, [memoizedZones, memoizedSelectedZoneId, memoizedHoveredZoneId, debouncedMousePos, showOverlay, showBalloons, isDraggingZone, isDrawingRectangle, rectangleStart, localZoneUpdates]);
 
   // Optimized redraw with proper dependencies
   useEffect(() => {
     if (imageLoaded) {
       drawCanvas();
     }
-  }, [imageLoaded, memoizedZones, memoizedSelectedZoneId, memoizedHoveredZoneId, debouncedMousePos, showOverlay, drawCanvas]);
+  }, [imageLoaded, memoizedZones, memoizedSelectedZoneId, memoizedHoveredZoneId, debouncedMousePos, showOverlay, drawCanvas, localZoneUpdates]);
 
   const getCanvasCoordinates = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -436,23 +443,18 @@ export function ZoneCanvas({
       const { x1, y1, x2, y2 } = zone.bbox;
       const inBbox = x >= x1 && x <= x2 && y >= y1 && y <= y2;
       
-      console.log(`🔍 Checking zone ${zone.id}: bbox(${x1},${y1},${x2},${y2}) point(${x},${y}) inBbox:${inBbox}`);
-      
       if (inBbox) {
         // If polygon exists and is valid, do additional polygon check
         if (zone.polygon && zone.polygon.length >= 4 && zone.polygon.every(p => p.length >= 2)) {
           if (isPointInPolygon(x, y, zone.polygon)) {
-            console.log(`✅ Found zone ${zone.id} via polygon`);
             return zone;
           }
         } else {
           // No polygon or invalid polygon, use bounding box
-          console.log(`✅ Found zone ${zone.id} via bbox`);
           return zone;
         }
       }
     }
-    console.log('❌ No zone found at point');
     return null;
   };
 
@@ -469,47 +471,34 @@ export function ZoneCanvas({
     const inHorizontal = x >= x1 - edgeTolerance && x <= x2 + edgeTolerance;
     const inVertical = y >= y1 - edgeTolerance && y <= y2 + edgeTolerance;
     
-    console.log(`🔧 Resize handle check for zone ${zone.id}: point(${x},${y}) bbox(${x1},${y1},${x2},${y2})`);
-    console.log(`🔧 Near edges: L:${nearLeft} R:${nearRight} T:${nearTop} B:${nearBottom}`);
-    console.log(`🔧 In bounds: H:${inHorizontal} V:${inVertical}`);
-    
     // Check corners first (priority over edges)
     if (nearLeft && nearTop && x >= x1 - edgeTolerance && x <= x1 + cornerSize && y >= y1 - edgeTolerance && y <= y1 + cornerSize) {
-      console.log('🔧 Found corner handle: nw');
       return 'nw';
     }
     if (nearRight && nearTop && x >= x2 - cornerSize && x <= x2 + edgeTolerance && y >= y1 - edgeTolerance && y <= y1 + cornerSize) {
-      console.log('🔧 Found corner handle: ne');
       return 'ne';
     }
     if (nearLeft && nearBottom && x >= x1 - edgeTolerance && x <= x1 + cornerSize && y >= y2 - cornerSize && y <= y2 + edgeTolerance) {
-      console.log('🔧 Found corner handle: sw');
       return 'sw';
     }
     if (nearRight && nearBottom && x >= x2 - cornerSize && x <= x2 + edgeTolerance && y >= y2 - cornerSize && y <= y2 + edgeTolerance) {
-      console.log('🔧 Found corner handle: se');
       return 'se';
     }
     
     // Check edges (anywhere along the border)
     if (nearTop && inHorizontal) {
-      console.log('🔧 Found edge handle: n');
       return 'n';
     }
     if (nearBottom && inHorizontal) {
-      console.log('🔧 Found edge handle: s');
       return 's';
     }
     if (nearLeft && inVertical) {
-      console.log('🔧 Found edge handle: w');
       return 'w';
     }
     if (nearRight && inVertical) {
-      console.log('🔧 Found edge handle: e');
       return 'e';
     }
 
-    console.log('🔧 No resize handle found');
     return null;
   };
 
@@ -522,11 +511,6 @@ export function ZoneCanvas({
     const btnY = y1 - offset - btnSize; // Outside top border
     
     const clicked = x >= btnX && x <= btnX + btnSize && y >= btnY && y <= btnY + btnSize;
-    
-    if (clicked) {
-      console.log('🗑️ Delete button clicked!', zone.id, 'at', { x, y }, 'button at', { btnX, btnY, btnSize });
-    }
-    
     return clicked;
   };
 
@@ -558,7 +542,6 @@ export function ZoneCanvas({
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const { x, y } = getCanvasCoordinates(e);
-    console.log('🖱️ Mouse down at:', { x, y });
     
     // Check all zones for bubble clicks first (bubbles are outside zone bounds)
     for (const zone of zones) {
@@ -573,41 +556,34 @@ export function ZoneCanvas({
       }
     }
 
-    // Find zone at click point
-    const clickedZone = findZoneAtPoint(x, y);
-    console.log('🔍 Found zone at point:', clickedZone?.id || 'none');
-    
-    if (clickedZone) {
-      console.log('📦 Zone bbox:', clickedZone.bbox);
-      
-      // Check if delete button was clicked
-      if (isDeleteButtonClicked(x, y, clickedZone)) {
-        console.log('🗑️ Deleting zone:', clickedZone.id);
-        onZoneDelete(clickedZone.id);
+    // Check all zones for delete button clicks (delete buttons are outside zone bounds)
+    for (const zone of zones) {
+      if (isDeleteButtonClicked(x, y, zone)) {
+        onZoneDelete(zone.id);
         e.preventDefault();
         e.stopPropagation();
         return;
       }
+    }
 
+    // Find zone at click point
+    const clickedZone = findZoneAtPoint(x, y);
+    
+    if (clickedZone) {
       onZoneSelect(clickedZone.id);
-      console.log('🎯 Zone selected:', clickedZone.id, 'text:', clickedZone.text);
       
       // Check if a resize handle was clicked
       const handle = getResizeHandle(x, y, clickedZone);
-      console.log('🔧 Resize handle check result:', handle);
       if (handle) {
-        console.log('🔧 Resize handle clicked:', handle);
         setResizeHandle(handle);
         setIsDraggingZone(true);
         setIsDrawing(true); // Need this for mouse move to work
       } else {
-        console.log('🖱️ Starting to drag zone');
         // Start dragging the zone
         setIsDraggingZone(true);
         setIsDrawing(true); // Need this for mouse move to work
       }
     } else {
-      console.log('🖱️ Click on empty space');
       // Click on empty space - start drawing rectangle for annotation
       onZoneSelect(null);
       setDragStart({ x, y });
@@ -656,7 +632,16 @@ export function ZoneCanvas({
     }
 
     // Update hover state with timeout for delete button
-    const hoveredZone = findZoneAtPoint(x, y);
+    let hoveredZone = findZoneAtPoint(x, y);
+    
+    // If no zone found at point, check if mouse is over delete button of any hovered zone
+    if (!hoveredZone && hoveredZoneId) {
+      const currentHoveredZone = zones.find(z => z.id === hoveredZoneId);
+      if (currentHoveredZone && isDeleteButtonClicked(x, y, currentHoveredZone)) {
+        // Mouse is over delete button, keep the zone hovered
+        hoveredZone = currentHoveredZone;
+      }
+    }
     
     if (hoveredZone) {
       // Clear any existing timeout
@@ -672,7 +657,7 @@ export function ZoneCanvas({
       }
       hideDeleteButtonTimeoutRef.current = setTimeout(() => {
         setHoveredZoneId(null);
-      }, 800); // 800ms delay before hiding delete button
+      }, 300); // 300ms delay before hiding delete button
     }
     
     // Update hover card position and zone (allow cards even with overlay)
@@ -786,10 +771,7 @@ export function ZoneCanvas({
     if (memoizedSelectedZoneId && isDrawing && !isDrawingRectangle) {
       const selectedZone = memoizedZones.find(z => z.id === memoizedSelectedZoneId);
       if (selectedZone) {
-        console.log('🔄 Moving/resizing zone:', memoizedSelectedZoneId, 'handle:', resizeHandle, 'isDrawing:', isDrawing, 'dragStart:', dragStart);
-        
         if (!dragStart) {
-          console.log('❌ No dragStart - setting it now');
           setDragStart({ x, y });
           return;
         }
@@ -797,6 +779,8 @@ export function ZoneCanvas({
         let { x1, y1, x2, y2 } = selectedZone.bbox;
 
         if (resizeHandle) {
+          // Resizing zone with handle
+          
           // Resize based on handle
           if (resizeHandle.includes('n')) y1 += dy;
           if (resizeHandle.includes('s')) y2 += dy;
@@ -812,6 +796,8 @@ export function ZoneCanvas({
             if (resizeHandle.includes('n')) y1 = y2 - 10;
             if (resizeHandle.includes('s')) y2 = y1 + 10;
           }
+          
+          // Bbox updated
         } else {
           // Move
           x1 += dx;
@@ -820,23 +806,74 @@ export function ZoneCanvas({
           y2 += dy;
         }
 
+        // Update the zone data
         onZoneUpdate(memoizedSelectedZoneId, {
           bbox: {
             ...selectedZone.bbox,
-            x1,
-            y1,
-            x2,
-            y2,
+            x1, y1, x2, y2,
             width: x2 - x1,
             height: y2 - y1,
           },
         });
+        
+        // Force immediate canvas redraw with updated coordinates
+        const canvas = canvasRef.current;
+        const img = imageRef.current;
+        if (canvas && img && imageLoaded) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            // Clear and redraw immediately
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            
+            // Draw all zones with updated selected zone
+            memoizedZones.forEach((zone) => {
+              let zoneBbox = zone.bbox;
+              if (zone.id === memoizedSelectedZoneId) {
+                // Use the new coordinates for the selected zone
+                zoneBbox = { x1, y1, x2, y2, width: x2 - x1, height: y2 - y1 };
+              }
+              
+              const { x1: bx1, y1: by1, x2: bx2, y2: by2 } = zoneBbox;
+              const isSelected = zone.id === memoizedSelectedZoneId;
+              const isHovered = zone.id === memoizedHoveredZoneId;
+              
+              // Draw zone box
+              ctx.strokeStyle = isSelected ? '#00FF00' : (isHovered ? '#FF8800' : '#0088FF');
+              ctx.lineWidth = isSelected ? 3 : 2;
+              ctx.strokeRect(bx1, by1, bx2 - bx1, by2 - by1);
+              
+              // Draw resize handles for selected zone
+              if (isSelected) {
+                const handleSize = 8;
+                ctx.fillStyle = '#00FF00';
+                
+                // Corner handles
+                ctx.fillRect(bx1 - handleSize/2, by1 - handleSize/2, handleSize, handleSize);
+                ctx.fillRect(bx2 - handleSize/2, by1 - handleSize/2, handleSize, handleSize);
+                ctx.fillRect(bx1 - handleSize/2, by2 - handleSize/2, handleSize, handleSize);
+                ctx.fillRect(bx2 - handleSize/2, by2 - handleSize/2, handleSize, handleSize);
+                
+                // Edge handles
+                ctx.fillRect((bx1 + bx2)/2 - handleSize/2, by1 - handleSize/2, handleSize, handleSize);
+                ctx.fillRect((bx1 + bx2)/2 - handleSize/2, by2 - handleSize/2, handleSize, handleSize);
+                ctx.fillRect(bx1 - handleSize/2, (by1 + by2)/2 - handleSize/2, handleSize, handleSize);
+                ctx.fillRect(bx2 - handleSize/2, (by1 + by2)/2 - handleSize/2, handleSize, handleSize);
+              }
+            });
+            
+            // Canvas redraw completed
+          }
+        }
       }
       setDragStart({ x, y });
     }
-  }, [memoizedZones, memoizedSelectedZoneId, isDrawing, dragStart, draggingBubble, isDrawingRectangle, rectangleStart, resizeHandle, onZoneUpdate]);
+  }, [memoizedZones, memoizedSelectedZoneId, isDrawing, dragStart, draggingBubble, isDrawingRectangle, rectangleStart, resizeHandle, onZoneUpdate, imageLoaded]);
 
   const handleMouseUp = () => {
+    // Clear local updates when mouse is released
+    setLocalZoneUpdates({});
+    
     // If we were drawing a rectangle, finish it
     if (isDrawingRectangle && rectangleStart && dragStart && mousePos) {
       const { x: startX, y: startY } = rectangleStart;
@@ -850,7 +887,6 @@ export function ZoneCanvas({
       
       // Only create rectangle if it has minimum size
       if (x2 - x1 > 10 && y2 - y1 > 10) {
-        console.log('📐 Rectangle drawn:', { x1, y1, x2, y2 });
         // Send the entire rectangle bounds to the server for better OCR detection
         // This will help with rotated text like "11.5" at 90°
         onCanvasClick((x1 + x2) / 2, (y1 + y2) / 2, { 
@@ -871,8 +907,13 @@ export function ZoneCanvas({
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    // Delete selected zone with Delete or Backspace key
-    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedZoneId) {
+    // Check if user is typing in an input field
+    const target = e.target as HTMLElement;
+    const isEditingText = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+    
+    // Only delete zone if NOT editing text
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedZoneId && !isEditingText) {
+      e.preventDefault(); // Prevent browser back navigation on Backspace
       onZoneDelete(selectedZoneId);
     }
   };

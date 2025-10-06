@@ -196,6 +196,44 @@ body {
   color: var(--primary-color);
 }
 
+.zone-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  gap: 10px;
+}
+
+.zone-list-header h3 {
+  margin: 0 0 0 0;
+  flex: 1;
+}
+
+.clear-all-btn {
+  background: linear-gradient(135deg, #ff4444, #cc0000);
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  font-weight: 600;
+}
+
+.clear-all-btn:hover {
+  background: linear-gradient(135deg, #ff6666, #ff0000);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255, 0, 0, 0.3);
+}
+
+.clear-all-btn:active {
+  transform: translateY(0);
+}
+
 .zone-list-empty {
   padding: 40px 20px;
   text-align: center;
@@ -214,87 +252,460 @@ body {
   gap: 10px;
 }
 
-.zone-item {
+/* Compact list-style zone items */
+.zone-item-compact {
   background: var(--bg-dark);
-  border: 2px solid var(--border-color);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
-  padding: 12px;
+  padding: 8px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   cursor: pointer;
+  transition: all 0.2s;
+  min-height: 50px;
+}
+
+.zone-item-compact:hover {
+  border-color: var(--primary-color);
+  background: rgba(0, 136, 255, 0.05);
+}
+
+.zone-item-compact.selected {
+  border-color: var(--success-color);
+  background: rgba(0, 255, 0, 0.08);
+}
+
+.zone-item-compact.empty-zone {
+  border-color: #ff9800;
+  background: rgba(255, 152, 0, 0.05);
+}
+
+.zone-item-compact.empty-zone:hover {
+  border-color: #ff9800;
+  background: rgba(255, 152, 0, 0.1);
+}
+
+.zone-badge-small {
+  background: var(--primary-color);
+  color: white;
+  padding: 3px 7px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  min-width: 32px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.zone-thumbnail-small {
+  min-width: 40px;
+  max-width: 50px;
+  height: auto;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: white;
+  flex-shrink: 0;
+}
+
+.zone-thumbnail-small img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.zone-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.zone-text-medium {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--primary-color);
+  cursor: text;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+.zone-text-medium:hover {
+  background: rgba(0, 136, 255, 0.1);
+}
+
+.zone-text-input {
+  width: 100%;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--primary-color);
+  background: var(--bg-light);
+  border: 1px solid var(--primary-color);
+  border-radius: 3px;
+  padding: 2px 4px;
+  outline: none;
+}
+
+.zone-tol-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.tol-mini {
+  background: linear-gradient(135deg, #4caf50, #45a049);
+  color: white;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tol-mini.thread {
+  background: linear-gradient(135deg, #ff9800, #f57c00);
+}
+
+.tol-mini.iso {
+  background: linear-gradient(135deg, #2196f3, #1976d2);
+}
+
+.tol-mini.diameter {
+  background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+}
+
+.tol-mini.rotation {
+  background: linear-gradient(135deg, #00bcd4, #0097a7);
+}
+
+.tol-mini.middle {
+  background: linear-gradient(135deg, #673ab7, #512da8);
+}
+
+.tol-mini.editable {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.tol-mini.editable:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.tol-mini.add-tol {
+  background: linear-gradient(135deg, #757575, #616161);
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.tol-mini.add-tol:hover {
+  background: linear-gradient(135deg, #9e9e9e, #757575);
+  transform: scale(1.05);
+}
+
+.tol-edit-group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.tol-input {
+  width: 60px;
+  padding: 2px 4px;
+  font-size: 0.7rem;
+  border: 1px solid var(--primary-color);
+  border-radius: 4px;
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.tol-save-btn,
+.tol-cancel-btn {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: bold;
   transition: all 0.2s;
 }
 
-.zone-item:hover {
-  border-color: var(--primary-color);
+.tol-save-btn {
+  background: #4caf50;
+  color: white;
 }
 
-.zone-item.selected {
-  border-color: var(--success-color);
-  background: rgba(0, 255, 0, 0.05);
+.tol-save-btn:hover {
+  background: #45a049;
+  transform: scale(1.1);
+}
+
+.tol-cancel-btn {
+  background: #f44336;
+  color: white;
+}
+
+.tol-cancel-btn:hover {
+  background: #da190b;
+  transform: scale(1.1);
+}
+
+.zone-actions-compact {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.zone-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  opacity: 0.6;
+  transition: all 0.2s;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+}
+
+.zone-btn:hover {
+  opacity: 1;
+  color: var(--primary-color);
+}
+
+.zone-btn.undo:hover {
+  color: #ff9800;
+}
+
+.zone-btn.delete:hover {
+  color: #ff3b30;
+}
+
+.zone-header {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .zone-badge {
   background: var(--primary-color);
   color: white;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-weight: bold;
-  min-width: 40px;
+  min-width: 45px;
   text-align: center;
 }
 
-.zone-thumbnail {
-  margin: 0 8px;
-  min-width: 40px;
-  max-width: 60px;
-  height: auto;
+.zone-body {
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: transparent;
-  border-radius: 4px;
-  padding: 2px;
-  position: relative;
-  cursor: pointer;
-  transition: all 0.2s;
+  gap: 12px;
 }
 
-.zone-thumbnail:hover {
-  transform: scale(1.1);
-  box-shadow: 0 0 10px rgba(0, 136, 255, 0.5);
+.zone-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zone-text-large {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  text-align: center;
+}
+
+.zone-tolerance-compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.tol-badge {
+  background: linear-gradient(135deg, #4caf50, #45a049);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tol-badge.thread {
+  background: linear-gradient(135deg, #ff9800, #f57c00);
+}
+
+.tol-badge.iso {
+  background: linear-gradient(135deg, #2196f3, #1976d2);
+}
+
+.tol-badge.diameter {
+  background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+}
+
+.tol-badge.rotation {
+  background: linear-gradient(135deg, #00bcd4, #0097a7);
+}
+
+.zone-header {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.zone-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.zone-thumbnail {
+  min-width: 50px;
+  max-width: 70px;
+  height: auto;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: white;
 }
 
 .zone-thumbnail img {
-  max-width: 100%;
-  max-height: 50px;
+  width: 100%;
+  height: auto;
+  display: block;
   image-rendering: crisp-edges;
   image-rendering: pixelated;
-  transition: transform 0.2s;
 }
 
-.thumbnail-overlay {
-  position: absolute;
-  top: 0;
-  right: 0;
-  background: rgba(0, 136, 255, 0.9);
+.zone-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.zone-text-large {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  text-align: center;
+  letter-spacing: 0.5px;
+  cursor: text;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.zone-text-large:hover {
+  background: rgba(0, 136, 255, 0.05);
+}
+
+.zone-text-edit {
+  width: 100%;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  text-align: center;
+  letter-spacing: 0.5px;
+  background: var(--bg-light);
+  border: 2px solid var(--primary-color);
+  border-radius: 4px;
+  padding: 4px 8px;
+  outline: none;
+}
+
+.zone-tolerance-compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.tol-badge {
+  background: linear-gradient(135deg, #4caf50, #45a049);
   color: white;
-  padding: 2px 4px;
-  font-size: 10px;
-  border-radius: 0 4px 0 4px;
-  opacity: 0;
-  transition: opacity 0.2s;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.zone-thumbnail:hover .thumbnail-overlay {
-  opacity: 1;
+.tol-badge.thread {
+  background: linear-gradient(135deg, #ff9800, #f57c00);
+}
+
+.tol-badge.iso {
+  background: linear-gradient(135deg, #2196f3, #1976d2);
+}
+
+.tol-badge.diameter {
+  background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+}
+
+.tol-badge.rotation {
+  background: linear-gradient(135deg, #00bcd4, #0097a7);
 }
 
 .zone-content {
   flex: 1;
   min-width: 0;
+}
+
+.zone-text {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.zone-tolerance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+
+.tolerance-badge {
+  background: linear-gradient(135deg, #4caf50, #45a049);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tolerance-badge.thread {
+  background: linear-gradient(135deg, #ff9800, #f57c00);
+}
+
+.tolerance-badge.iso {
+  background: linear-gradient(135deg, #2196f3, #1976d2);
+}
+
+.diameter-badge {
+  background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.tolerance-range {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 .zone-meta {
@@ -303,11 +714,6 @@ body {
   align-items: center;
   flex-wrap: wrap;
   margin-top: 4px;
-}
-
-.zone-text {
-  font-weight: 500;
-  margin-bottom: 4px;
 }
 
 .zone-confidence {
@@ -326,13 +732,15 @@ body {
 
 .zone-actions {
   display: flex;
-  gap: 4px;
+  flex-direction: column;
+  gap: 6px;
   align-items: center;
 }
 
 .zone-re-ocr,
 .zone-fit,
 .zone-rotate,
+.zone-undo,
 .zone-delete {
   background: transparent;
   border: none;
@@ -350,6 +758,11 @@ body {
 .zone-rotate:hover {
   opacity: 1;
   color: var(--primary-color);
+}
+
+.zone-undo:hover {
+  opacity: 1;
+  color: #ff9800;
 }
 
 .zone-delete:hover {
@@ -764,6 +1177,7 @@ body {
   .zone-re-ocr,
   .zone-fit,
   .zone-rotate,
+  .zone-undo,
   .zone-delete {
     padding: 2px;
   }

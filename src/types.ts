@@ -18,6 +18,7 @@ export interface Zone {
   orientation?: string;
   croppedImage?: string; // base64 data URL
   bubbleOffset?: { x: number; y: number }; // Draggable bubble position offset from top-left
+  is_empty?: boolean; // Flag for zones with no text detected
   tolerance_info?: {
     value?: number;
     min_tolerance?: number;

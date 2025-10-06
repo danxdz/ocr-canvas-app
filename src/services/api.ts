@@ -167,6 +167,55 @@ export const ocrAPI = {
   },
 
   /**
+   * Process OCR directly on a thumbnail/cropped image
+   * Used for Re-OCR to get fresh text from saved thumbnail
+   */
+  async processOCRDirect(thumbnailDataUrl: string, rotation: number = 0): Promise<{ text: string, confidence: number } | null> {
+    // Validate input
+    if (!thumbnailDataUrl || typeof thumbnailDataUrl !== 'string') {
+      throw new Error('Invalid thumbnail data URL');
+    }
+
+    try {
+      // Convert data URL to File
+      const blob = await fetch(thumbnailDataUrl).then(r => r.blob());
+      const file = new File([blob], 'thumbnail.png', { type: 'image/png' });
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('mode', 'hardcore'); // Use hardcore mode for better accuracy
+
+      const response = await fetchWithRetry(`${API_URL}/ocr/process`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorMessage = await parseErrorResponse(response);
+        throw new Error(`OCR processing failed: ${errorMessage}`);
+      }
+
+      const result = await response.json();
+      
+      // Extract first zone's text
+      if (result.zones && result.zones.length > 0) {
+        const firstZone = result.zones[0];
+        return {
+          text: firstZone.text,
+          confidence: firstZone.confidence
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Unknown error occurred during OCR processing');
+    }
+  },
+
+  /**
    * Find text within a rectangle area (drag to find)
    */
   async findTextInRectangle(imageDataUrl: string, rectangleBounds: { x1: number, y1: number, x2: number, y2: number }, rotation: number = 0): Promise<Zone | null> {

@@ -11,12 +11,14 @@ function App() {
   const [image, setImage] = useState<File | null>(null);
   const [imageSrc, setImageSrc] = useState<string>('');
   const [zones, setZones] = useState<Zone[]>([]);
+  const [zoneHistory, setZoneHistory] = useState<Zone[][]>([]); // Undo history
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string>('Ready - v1.2.3 (Hard refresh if no changes visible)');
   const [showOverlay, setShowOverlay] = useState(false); // Toggle for white box overlay
   const [showBalloons, setShowBalloons] = useState(true); // Toggle for number balloons
   const [showImageControls, setShowImageControls] = useState(false); // Toggle for image adjustment panel
+  const [showZoneList, setShowZoneList] = useState(true); // Toggle for zone list panel
   const [brightness, setBrightness] = useState(100);
   const [contrast, setContrast] = useState(100);
   const [sharpness, setSharpness] = useState(100);
@@ -92,7 +94,24 @@ function App() {
         rotation: zone.rotation,
         text_orientation: zone.text_orientation,
         orientation: zone.orientation,
+        tolerance_info: zone.tolerance_info,
+        is_empty: zone.is_empty,
       }));
+      
+      // Generate thumbnails and calculate tolerances for all detected zones
+      setStatus('📸 Generating thumbnails...');
+      for (let i = 0; i < detectedZones.length; i++) {
+        try {
+          // Calculate tolerances
+          detectedZones[i] = calculateTolerancesForZone(detectedZones[i]);
+          
+          // Generate thumbnail
+          const thumbnail = await generateZoneThumbnail(detectedZones[i]);
+          detectedZones[i].croppedImage = thumbnail;
+        } catch (error) {
+          console.warn(`Thumbnail generation failed for zone ${detectedZones[i].id}, continuing without thumbnail`);
+        }
+      }
       
       setZones(detectedZones);
       setStatus(`✅ Found ${detectedZones.length} zones!`);
@@ -115,6 +134,108 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to calculate and add min/max/middle tolerances if they exist
+  const calculateTolerancesForZone = (zone: Zone): Zone => {
+    if (!zone.tolerance_info) return zone;
+    
+    // If already has min/max calculated, return as is
+    if (zone.tolerance_info.min_tolerance !== undefined && zone.tolerance_info.max_tolerance !== undefined) {
+      return zone;
+    }
+    
+    // Calculate from tolerance_plus/minus if available
+    if (zone.tolerance_info.tolerance_plus !== undefined || zone.tolerance_info.tolerance_minus !== undefined) {
+      // Extract base value from text (e.g., "34" from "34H7" or "Ø34H7")
+      const baseMatch = zone.text.match(/(\d+\.?\d*)/);
+      const baseValue = baseMatch ? parseFloat(baseMatch[1]) : 0;
+      
+      // Get tolerance values from server (already calculated)
+      const tolerancePlus = zone.tolerance_info.tolerance_plus || 0;
+      const toleranceMinus = zone.tolerance_info.tolerance_minus || 0;
+      
+      // Calculate actual min/max values
+      const minValue = baseValue + toleranceMinus;  // e.g., 34 + (-0.025) = 33.975
+      const maxValue = baseValue + tolerancePlus;   // e.g., 34 + 0.025 = 34.025
+      const middleValue = (minValue + maxValue) / 2; // e.g., (33.975 + 34.025) / 2 = 34.000
+      
+      // Debug logging removed for cleaner console
+      
+      return {
+        ...zone,
+        tolerance_info: {
+          ...zone.tolerance_info,
+          min_tolerance: toleranceMinus,  // Keep the tolerance values (e.g., -0.025)
+          max_tolerance: tolerancePlus,   // Keep the tolerance values (e.g., 0.025)
+          middle_value: Math.round(middleValue * 1000) / 1000  // Round to 3 decimal places (e.g., 34.000)
+        }
+      };
+    }
+    
+    return zone;
+  };
+
+  // Helper function to generate and save zone thumbnail
+  const generateZoneThumbnail = async (zone: Zone, rotation?: number): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      if (!imageSrc) {
+        reject(new Error('No image source available'));
+        return;
+      }
+      
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Failed to create canvas context'));
+            return;
+          }
+
+          const { x1, y1, x2, y2 } = zone.bbox;
+          const width = x2 - x1;
+          const height = y2 - y1;
+          
+          // Validate bbox dimensions
+          if (width <= 0 || height <= 0 || x1 < 0 || y1 < 0 || x2 > img.width || y2 > img.height) {
+            reject(new Error(`Invalid bbox dimensions: ${JSON.stringify(zone.bbox)}`));
+            return;
+          }
+          
+          // Use provided rotation or zone's current rotation
+          const angle = rotation !== undefined ? rotation : (zone.rotation || zone.text_orientation || 0);
+          
+          // Set canvas size based on rotation
+          if (Math.abs(angle) === 90 || Math.abs(angle) === 270) {
+            canvas.width = height;
+            canvas.height = width;
+          } else {
+            canvas.width = width;
+            canvas.height = height;
+          }
+
+          // Apply rotation if needed
+          if (Math.abs(angle) > 0) {
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate((angle * Math.PI) / 180);
+            ctx.translate(-width / 2, -height / 2);
+          }
+
+          // Draw cropped zone
+          ctx.drawImage(img, x1, y1, width, height, 0, 0, width, height);
+          
+          // Save as JPG with good quality
+          const thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+          resolve(thumbnailDataUrl);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = imageSrc;
+    });
   };
 
   const improveRotatedZones = async (rotatedZones: Zone[]) => {
@@ -211,9 +332,24 @@ function App() {
           rotation: zone.rotation,
           text_orientation: zone.text_orientation,
           orientation: zone.orientation,
+          tolerance_info: zone.tolerance_info,
+          is_empty: zone.is_empty,
         };
         
-        setZones([...zones, newZone]);
+        // Calculate tolerances and generate thumbnail immediately
+        try {
+          // Calculate tolerances first
+          const zoneWithTolerances = calculateTolerancesForZone(newZone);
+          
+          // Generate thumbnail
+          const thumbnail = await generateZoneThumbnail(zoneWithTolerances);
+          zoneWithTolerances.croppedImage = thumbnail;
+          
+          setZones([...zones, zoneWithTolerances]);
+        } catch (error) {
+          console.warn(`Failed to process zone ${zone.id}, continuing without thumbnail`);
+          setZones([...zones, newZone]); // Add zone without thumbnail on error
+        }
         setStatus(`✅ Found: "${zone.text}"`);
       } else {
         setStatus('⚠️ No text found at this location');
@@ -227,37 +363,78 @@ function App() {
   };
 
   const handleZoneUpdate = (zoneId: string, updates: Partial<Zone>) => {
-    console.log('🔄 handleZoneUpdate called for zone:', zoneId, 'updates:', updates);
-    
-    setZones(zones.map(zone => {
-      if (zone.id === zoneId) {
-        const updatedZone = { ...zone, ...updates };
-        
-        // If bbox was updated, ensure width and height are recalculated
-        if (updates.bbox) {
-          const { x1, y1, x2, y2 } = updatedZone.bbox;
-          const newWidth = x2 - x1;
-          const newHeight = y2 - y1;
-          
-          console.log('📏 Bbox update - old:', zone.bbox, 'new:', { x1, y1, x2, y2, width: newWidth, height: newHeight });
-          
-          updatedZone.bbox = {
-            ...updatedZone.bbox,
-            width: newWidth,
-            height: newHeight
-          };
-        }
-        
-        return updatedZone;
+    // Use functional update to get latest state
+    setZones(currentZones => {
+      // Check if zone still exists (might have been deleted)
+      const zoneExists = currentZones.some(z => z.id === zoneId);
+      if (!zoneExists) {
+        return currentZones;
       }
-      return zone;
-    }));
+      
+      return currentZones.map(zone => {
+        if (zone.id === zoneId) {
+          const updatedZone = { ...zone, ...updates };
+          
+          // If bbox was updated, ensure width and height are recalculated
+          if (updates.bbox) {
+            const { x1, y1, x2, y2 } = updatedZone.bbox;
+            const newWidth = x2 - x1;
+            const newHeight = y2 - y1;
+            
+            updatedZone.bbox = {
+              ...updatedZone.bbox,
+              width: newWidth,
+              height: newHeight
+            };
+          }
+          
+          return updatedZone;
+        }
+        return zone;
+      });
+    });
   };
 
   const handleZoneDelete = (zoneId: string) => {
+    // Save current state to history before deleting
+    setZoneHistory([...zoneHistory, zones]);
+    
     setZones(zones.filter(zone => zone.id !== zoneId));
     if (selectedZoneId === zoneId) {
       setSelectedZoneId(null);
+    }
+  };
+
+  const handleZoneUndo = (zoneId: string) => {
+    if (zoneHistory.length === 0) return;
+    
+    // Get the last state from history
+    const previousState = zoneHistory[zoneHistory.length - 1];
+    const previousZone = previousState.find(z => z.id === zoneId);
+    
+    if (previousZone) {
+      // Restore the previous zone state
+      setZones(zones.map(z => z.id === zoneId ? previousZone : z));
+      
+      // Remove the last state from history
+      setZoneHistory(zoneHistory.slice(0, -1));
+      
+      setStatus('✅ Undone');
+      setTimeout(() => setStatus(''), 2000);
+    }
+  };
+
+  const handleClearAll = () => {
+    if (zones.length === 0) return;
+    
+    if (confirm(`Are you sure you want to delete all ${zones.length} zones?`)) {
+      // Save current state to history before clearing
+      setZoneHistory([...zoneHistory, zones]);
+      
+      setZones([]);
+      setSelectedZoneId(null);
+      setStatus('✅ All zones cleared');
+      setTimeout(() => setStatus(''), 2000);
     }
   };
 
@@ -269,22 +446,81 @@ function App() {
       setLoading(true);
       setStatus(`Re-OCR zone: "${zone.text}"...`);
 
-      // Use the current resized bounding box for rectangle OCR
-      const { x1, y1, x2, y2 } = zone.bbox;
-      const rectangleBounds = { x1, y1, x2, y2 };
+      // Use saved thumbnail if available, otherwise generate it
+      let thumbnailDataUrl = zone.croppedImage;
+      
+      if (!thumbnailDataUrl) {
+        console.log('🔄 No saved thumbnail, generating new one...');
+        thumbnailDataUrl = await generateZoneThumbnail(zone);
+        
+        // Save the generated thumbnail for future use
+        setZones(zones.map(z =>
+          z.id === zoneId ? { ...z, croppedImage: thumbnailDataUrl } : z
+        ));
+      } else {
+        console.log('🔄 Re-OCR: Using saved thumbnail with rotation:', zone.rotation || 0);
+      }
 
-      console.log('🔄 Re-OCR: Using rectangle bounds:', rectangleBounds);
+      // Send thumbnail directly to OCR (no rectangle bounds needed)
+      const result = await ocrAPI.processOCRDirect(thumbnailDataUrl, zone.rotation || 0);
 
-      // Re-run OCR on this rectangle area with hardcore mode
-      const result = await ocrAPI.findTextInRectangle(imageSrc, rectangleBounds, zone.rotation || 0);
-
-      if (result) {
-        // Update the zone with new OCR result
+      if (result && result.text && result.text !== '[No Text]') {
+        // Update ONLY text and confidence - keep the same bounding box
         setZones(zones.map(z =>
           z.id === zoneId
             ? {
                 ...z,
-                text: result.text || z.text,
+                text: result.text,
+                confidence: result.confidence || z.confidence,
+                // Keep the same bbox, rotation, and other properties
+              }
+            : z
+        ));
+        setStatus(`✅ Re-OCR: "${zone.text}" → "${result.text}"`);
+        
+        // Clear status after 3 seconds
+        setTimeout(() => setStatus(''), 3000);
+      } else {
+        setStatus(`⚠️ Re-OCR found no text - keeping original text "${zone.text}"`);
+        
+        // Clear status after 3 seconds
+        setTimeout(() => setStatus(''), 3000);
+      }
+    } catch (error) {
+      console.error('Re-OCR error:', error);
+      setStatus(`❌ Re-OCR failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Clear status after 3 seconds
+      setTimeout(() => setStatus(''), 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleZoneFit = async (zoneId: string) => {
+    const zone = zones.find(z => z.id === zoneId);
+    if (!zone || !imageSrc) return;
+
+    try {
+      setLoading(true);
+      setStatus(`Re-fitting zone: "${zone.text}"...`);
+
+      // Use the current bounding box for rectangle OCR
+      const { x1, y1, x2, y2 } = zone.bbox;
+      const rectangleBounds = { x1, y1, x2, y2 };
+
+      console.log('🔄 Re-Fit: Using rectangle bounds:', rectangleBounds, 'rotation:', zone.rotation || 0);
+
+      // Re-run OCR on this rectangle area
+      const result = await ocrAPI.findTextInRectangle(imageSrc, rectangleBounds, zone.rotation || 0);
+
+      if (result && result.text) {
+        // Update text, confidence, AND bbox to fit tightly around the text
+        setZones(zones.map(z =>
+          z.id === zoneId
+            ? {
+                ...z,
+                text: result.text,
                 confidence: result.confidence || z.confidence,
                 bbox: {
                   x1: result.bbox?.x1 || z.bbox.x1,
@@ -294,28 +530,31 @@ function App() {
                   width: (result.bbox?.x2 || z.bbox.x2) - (result.bbox?.x1 || z.bbox.x1),
                   height: (result.bbox?.y2 || z.bbox.y2) - (result.bbox?.y1 || z.bbox.y1),
                 },
-                polygon: result.polygon || z.polygon, // Keep polygon for rotated text
+                polygon: result.polygon || z.polygon,
                 text_orientation: result.text_orientation !== undefined ? result.text_orientation : z.text_orientation,
                 rotation: result.rotation !== undefined ? result.rotation : z.rotation,
-                orientation: result.orientation || z.orientation,
               }
             : z
         ));
-        setStatus(`✅ Re-OCR: "${zone.text}" → "${result.text}"`);
+        setStatus(`✅ Re-fit: "${zone.text}" → "${result.text}" (box adjusted)`);
+        
+        // Clear status after 3 seconds
+        setTimeout(() => setStatus(''), 3000);
       } else {
-        setStatus(`⚠️ Re-OCR found no text at this location`);
+        setStatus(`⚠️ Re-fit found no text at this location`);
+        
+        // Clear status after 3 seconds
+        setTimeout(() => setStatus(''), 3000);
       }
     } catch (error) {
-      console.error('Re-OCR error:', error);
-      setStatus(`❌ Re-OCR failed: ${error.message}`);
+      console.error('Re-fit error:', error);
+      setStatus(`❌ Re-fit failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Clear status after 3 seconds
+      setTimeout(() => setStatus(''), 3000);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleZoneFit = async (zoneId: string) => {
-    // Fit = Re-OCR with tight bounding box
-    await handleZoneReOcr(zoneId);
   };
 
   const handleTextEdit = (zoneId: string, newText: string) => {
@@ -324,47 +563,70 @@ function App() {
     ));
   };
 
+  const handleToleranceEdit = (zoneId: string, minTol: number, maxTol: number) => {
+    setZones(zones.map(z => {
+      if (z.id === zoneId) {
+        // Extract numeric value from OCR text
+        const match = z.text.match(/(\d+\.?\d*)/);
+        const baseValue = match ? parseFloat(match[1]) : 0;
+        
+        // Calculate middle value: (base + min + base + max) / 2
+        const middleValue = (baseValue + minTol + baseValue + maxTol) / 2;
+        
+        return {
+          ...z,
+          tolerance_info: {
+            ...z.tolerance_info,
+            min_tolerance: minTol,
+            max_tolerance: maxTol,
+            middle_value: middleValue
+          }
+        };
+      }
+      return z;
+    }));
+  };
+
   const handleZoneRotate = async (zoneId: string) => {
     const zone = zones.find(z => z.id === zoneId);
     if (!zone || !imageSrc) return;
 
     setLoading(true);
-    setStatus('Rotating and re-OCRing zone...');
+    setStatus('Rotating thumbnail...');
 
     try {
-      // Rotate the zone 90 degrees clockwise
-      const newRotation = ((zone.rotation || 0) + 90) % 360;
+      // Rotate the zone 45 degrees clockwise
+      const newRotation = ((zone.rotation || 0) + 45) % 360;
       
-      // Use the current resized bounding box for rectangle OCR
-      const { x1, y1, x2, y2 } = zone.bbox;
-      const rectangleBounds = { x1, y1, x2, y2 };
-
-      console.log('🔄 Rotate: Using rectangle bounds:', rectangleBounds, 'with rotation:', newRotation);
+      console.log('🔄 Rotating thumbnail 45° clockwise, new rotation:', newRotation);
       
-      // Re-OCR the zone with the new rotation using rectangle mode
-      const result = await ocrAPI.findTextInRectangle(imageSrc, rectangleBounds, newRotation);
-
-      if (result) {
-        setZones(zones.map(z =>
-          z.id === zoneId
-            ? {
-                ...z,
-                // Only update text, confidence, and rotation - keep original bounding box
-                text: result.text || z.text,
-                confidence: result.confidence || z.confidence,
-                rotation: newRotation,
-                text_orientation: newRotation,
-                id: zoneId // Keep the same ID
-              }
-            : z
-        ));
-        setStatus(`Zone rotated to ${newRotation}° and re-OCRed (box size preserved)`);
-      } else {
-        setStatus('No text found after rotation');
-      }
+      // Generate and save the rotated thumbnail
+      const rotatedThumbnail = await generateZoneThumbnail(zone, newRotation);
+      
+      // Update zone with new rotation AND saved thumbnail
+      setZones(zones.map(z =>
+        z.id === zoneId
+          ? {
+              ...z,
+              rotation: newRotation,
+              text_orientation: newRotation,
+              croppedImage: rotatedThumbnail, // Save the rotated thumbnail
+              id: zoneId // Keep the same ID
+            }
+          : z
+      ));
+      
+      setStatus(`✅ Thumbnail rotated to ${newRotation}° and saved`);
+      
+      // Clear status after 2 seconds
+      setTimeout(() => setStatus(''), 2000);
+      
     } catch (error) {
       console.error('Rotate error:', error);
-      setStatus('Failed to rotate and re-OCR zone');
+      setStatus('❌ Failed to rotate thumbnail');
+      
+      // Clear status after 3 seconds
+      setTimeout(() => setStatus(''), 3000);
     } finally {
       setLoading(false);
     }
@@ -673,9 +935,13 @@ function App() {
               selectedZoneId={selectedZoneId}
               onZoneSelect={setSelectedZoneId}
               onZoneDelete={handleZoneDelete}
+              onZoneUndo={handleZoneUndo}
+              onClearAll={handleClearAll}
               onZoneReOcr={handleZoneReOcr}
               onZoneFit={handleZoneFit}
               onZoneRotate={handleZoneRotate}
+              onTextEdit={handleTextEdit}
+              onToleranceEdit={handleToleranceEdit}
               imageSrc={imageSrc}
             />
             </div>
