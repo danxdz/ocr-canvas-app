@@ -209,34 +209,53 @@ export function ZoneList({
                     </div>
                   ) : (
                     <>
-                      {zone.tolerance_info?.min_tolerance !== undefined && zone.tolerance_info?.max_tolerance !== undefined ? (
+                      {/* Show tolerance information if available */}
+                      {zone.tolerance_info && (
                         <>
-                          <span className="tol-mini editable" onClick={(e) => { e.stopPropagation(); setEditingTolerances({ zoneId: zone.id, min: zone.tolerance_info.min_tolerance?.toString() || '0', max: zone.tolerance_info.max_tolerance?.toString() || '0' }); }} title="Click to edit">
-                            Min:{zone.tolerance_info.min_tolerance} Max:{zone.tolerance_info.max_tolerance}
-                          </span>
+                          {/* Show min/max tolerances if calculated */}
+                          {(zone.tolerance_info.min_tolerance !== undefined || zone.tolerance_info.max_tolerance !== undefined) && (
+                            <span className="tol-mini editable" onClick={(e) => { e.stopPropagation(); setEditingTolerances({ zoneId: zone.id, min: zone.tolerance_info?.min_tolerance?.toString() || '0', max: zone.tolerance_info?.max_tolerance?.toString() || '0' }); }} title="Click to edit">
+                              Min:{zone.tolerance_info.min_tolerance || 0} Max:{zone.tolerance_info.max_tolerance || 0}
+                            </span>
+                          )}
+                          
+                          {/* Show middle value if calculated */}
                           {zone.tolerance_info.middle_value !== undefined && (
                             <span className="tol-mini middle" title="Calculated middle value">
                               Mid:{zone.tolerance_info.middle_value.toFixed(3)}
                             </span>
                           )}
+                          
+                          {/* Show tolerance type indicators */}
+                          {zone.tolerance_info.tolerance_type && (
+                            <>
+                              {zone.tolerance_info.tolerance_type.includes('±') && (
+                                <span className="tol-mini">± {zone.tolerance_info.tolerance_plus || zone.tolerance_info.tolerance_minus || 0}</span>
+                              )}
+                              {zone.tolerance_info.tolerance_type.includes('thread') && zone.tolerance_info.tolerance_class && (
+                                <span className="tol-mini thread">{zone.tolerance_info.tolerance_class}</span>
+                              )}
+                              {zone.tolerance_info.tolerance_type.includes('ISO') && zone.tolerance_info.tolerance_class && (
+                                <span className="tol-mini iso">{zone.tolerance_info.tolerance_class}</span>
+                              )}
+                            </>
+                          )}
+                          
+                          {/* Show diameter indicator */}
+                          {zone.tolerance_info.is_diameter && (
+                            <span className="tol-mini diameter">Ø</span>
+                          )}
                         </>
-                      ) : (
-                        <span className="tol-mini add-tol" onClick={(e) => { e.stopPropagation(); setEditingTolerances({ zoneId: zone.id, min: '0', max: '0' }); }} title="Add tolerance">+ Tol</span>
                       )}
-                      {zone.tolerance_info?.tolerance_type === '±' && (
-                        <span className="tol-mini">± {zone.tolerance_info.tolerance_plus || zone.tolerance_info.tolerance_minus}</span>
-                      )}
-                      {zone.tolerance_info?.tolerance_type === 'thread' && zone.tolerance_info.tolerance_class && (
-                        <span className="tol-mini thread">{zone.tolerance_info.tolerance_class}</span>
-                      )}
-                      {zone.tolerance_info?.tolerance_type === 'ISO' && zone.tolerance_info.tolerance_class && (
-                        <span className="tol-mini iso">{zone.tolerance_info.tolerance_class}</span>
-                      )}
-                      {zone.tolerance_info?.is_diameter && (
-                        <span className="tol-mini diameter">Ø</span>
-                      )}
+                      
+                      {/* Show rotation indicator */}
                       {zone.text_orientation && Math.abs(zone.text_orientation) > 5 && (
                         <span className="tol-mini rotation">↻{Math.round(zone.text_orientation)}°</span>
+                      )}
+                      
+                      {/* Add tolerance button if no tolerance info */}
+                      {!zone.tolerance_info && (
+                        <span className="tol-mini add-tol" onClick={(e) => { e.stopPropagation(); setEditingTolerances({ zoneId: zone.id, min: '0', max: '0' }); }} title="Add tolerance">+ Tol</span>
                       )}
                     </>
                   )}

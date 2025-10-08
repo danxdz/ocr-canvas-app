@@ -12,6 +12,7 @@ interface ZoneCanvasProps {
   onZoneDelete: (zoneId: string) => void;
   onCanvasClick: (x: number, y: number, rectangleData?: { rectangleBounds: { x1: number, y1: number, x2: number, y2: number }, width: number, height: number }) => void;
   onZoneResize?: (zoneId: string) => void;
+  onZoneResizeComplete?: (zoneId: string) => void;
   showOverlay?: boolean;
   onTextEdit?: (zoneId: string, newText: string) => void;
   showBalloons?: boolean;
@@ -56,7 +57,6 @@ export function ZoneCanvas({
   const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null);
   const hideDeleteButtonTimeoutRef = useRef<number | null>(null);
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
-  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [cursor, setCursor] = useState('crosshair');
   const [draggingBubble, setDraggingBubble] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>('');
@@ -67,6 +67,7 @@ export function ZoneCanvas({
   const [isDraggingZone, setIsDraggingZone] = useState(false);
   const [isDrawingRectangle, setIsDrawingRectangle] = useState(false);
   const [rectangleStart, setRectangleStart] = useState<{ x: number; y: number } | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
   const hideCardTimeoutRef = useRef<number | null>(null);
 
   // Debounce mouse position to reduce redraws
@@ -199,6 +200,11 @@ export function ZoneCanvas({
       const isSelected = effectiveZone.id === memoizedSelectedZoneId;
       const isHovered = effectiveZone.id === memoizedHoveredZoneId;
 
+      // Apply small adjustment to better align with visual text
+      const textAlignmentOffset = 2; // Small upward adjustment to align with visual text
+      const adjustedY1 = y1 - textAlignmentOffset;
+      const adjustedY2 = y2 - textAlignmentOffset;
+
       if (showOverlay) {
         // OVERLAY MODE: Draw white opaque boxes with black OCR text
         // Draw white background with proper orientation
@@ -207,9 +213,9 @@ export function ZoneCanvas({
         if (zone.polygon && zone.polygon.length >= 4) {
           // Use polygon for rotated boxes
           ctx.beginPath();
-          ctx.moveTo(zone.polygon[0][0], zone.polygon[0][1]);
+          ctx.moveTo(zone.polygon[0][0], zone.polygon[0][1] - textAlignmentOffset);
           for (let i = 1; i < zone.polygon.length; i++) {
-            ctx.lineTo(zone.polygon[i][0], zone.polygon[i][1]);
+            ctx.lineTo(zone.polygon[i][0], zone.polygon[i][1] - textAlignmentOffset);
           }
           ctx.closePath();
           ctx.fill();
@@ -218,9 +224,9 @@ export function ZoneCanvas({
           const rotationDeg = zone.text_orientation || zone.rotation || 0;
           const rotationRad = (rotationDeg * Math.PI) / 180;
           const centerX = (x1 + x2) / 2;
-          const centerY = (y1 + y2) / 2;
+          const centerY = (adjustedY1 + adjustedY2) / 2;
           const width = x2 - x1;
-          const height = y2 - y1;
+          const height = adjustedY2 - adjustedY1;
           
           ctx.save();
           ctx.translate(centerX, centerY);
@@ -228,16 +234,15 @@ export function ZoneCanvas({
           ctx.fillRect(-width / 2, -height / 2, width, height);
           ctx.restore();
         } else {
-          // Standard axis-aligned rectangle
-          ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+          // Standard axis-aligned rectangle with alignment adjustment
+          ctx.fillRect(x1, adjustedY1, x2 - x1, adjustedY2 - adjustedY1);
         }
         
         // Draw OCR text on white background with proper size and rotation
         ctx.save(); // Save current context state
         
-        // Calculate font size based on zone height (80% of height)
-        const zoneHeight = y2 - y1;
-        const fontSize = Math.max(10, Math.min(zoneHeight * 0.8, 72)); // Between 10px and 72px
+        // Use consistent font size for all overlay text
+        const fontSize = 13; // Same as bubble numbers
         ctx.font = `bold ${fontSize}px Arial`;
         ctx.fillStyle = 'black';
         ctx.textAlign = 'left';
@@ -249,7 +254,7 @@ export function ZoneCanvas({
         
         // Calculate center of zone for rotation
         const centerX = (x1 + x2) / 2;
-        const centerY = (y1 + y2) / 2;
+        const centerY = (adjustedY1 + adjustedY2) / 2;
         
         // Translate to center, rotate, then translate back
         ctx.translate(centerX, centerY);
@@ -264,19 +269,19 @@ export function ZoneCanvas({
         
         ctx.restore(); // Restore context state
         
-        // Draw thin border
+        // Draw thin border with adjusted coordinates
         ctx.strokeStyle = isSelected ? '#00FF00' : '#999';
         ctx.lineWidth = isSelected ? 2 : 1;
         if (zone.polygon && zone.polygon.length >= 4) {
           ctx.beginPath();
-          ctx.moveTo(zone.polygon[0][0], zone.polygon[0][1]);
+          ctx.moveTo(zone.polygon[0][0], zone.polygon[0][1] - textAlignmentOffset);
           for (let i = 1; i < zone.polygon.length; i++) {
-            ctx.lineTo(zone.polygon[i][0], zone.polygon[i][1]);
+            ctx.lineTo(zone.polygon[i][0], zone.polygon[i][1] - textAlignmentOffset);
           }
           ctx.closePath();
           ctx.stroke();
         } else {
-          ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+          ctx.strokeRect(x1, adjustedY1, x2 - x1, adjustedY2 - adjustedY1);
         }
       } else {
         // NORMAL MODE: Draw transparent boxes with labels
@@ -286,16 +291,16 @@ export function ZoneCanvas({
 
         if (zone.polygon && zone.polygon.length >= 4) {
           ctx.beginPath();
-          ctx.moveTo(zone.polygon[0][0], zone.polygon[0][1]);
+          ctx.moveTo(zone.polygon[0][0], zone.polygon[0][1] - textAlignmentOffset);
           for (let i = 1; i < zone.polygon.length; i++) {
-            ctx.lineTo(zone.polygon[i][0], zone.polygon[i][1]);
+            ctx.lineTo(zone.polygon[i][0], zone.polygon[i][1] - textAlignmentOffset);
           }
           ctx.closePath();
           ctx.stroke();
           ctx.fill();
         } else {
-          ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-          ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+          ctx.strokeRect(x1, adjustedY1, x2 - x1, adjustedY2 - adjustedY1);
+          ctx.fillRect(x1, adjustedY1, x2 - x1, adjustedY2 - adjustedY1);
         }
 
         // Draw number bubble (no text labels - keep boxes clean)
@@ -309,25 +314,25 @@ export function ZoneCanvas({
           // Get stored position or use smart default
           const bubbleOffset = zone.bubbleOffset || defaultOffset;
           let bubbleX = x1 + bubbleOffset.x;
-          let bubbleY = y1 + bubbleOffset.y;
+          let bubbleY = adjustedY1 + bubbleOffset.y; // Use adjusted Y position
           
           // Ensure bubble stays within canvas bounds with smart repositioning
           if (bubbleX < bubbleRadius + 5) {
             bubbleX = x2 + bubbleRadius + 2; // Move to right side
           }
           if (bubbleY < bubbleRadius + 5) {
-            bubbleY = y2 + bubbleRadius + 2; // Move to bottom side
+            bubbleY = adjustedY2 + bubbleRadius + 2; // Move to bottom side
           }
           if (bubbleX > canvas.width - bubbleRadius - 5) {
             bubbleX = x1 - bubbleRadius - 2; // Move to left side
           }
           if (bubbleY > canvas.height - bubbleRadius - 5) {
-            bubbleY = y1 - bubbleRadius - 2; // Move to top side
+            bubbleY = adjustedY1 - bubbleRadius - 2; // Move to top side
           }
           
           // Store the adjusted position back to the zone
           if (!zone.bubbleOffset) {
-            zone.bubbleOffset = { x: bubbleX - x1, y: bubbleY - y1 };
+            zone.bubbleOffset = { x: bubbleX - x1, y: bubbleY - adjustedY1 };
           }
           
           // Bubble circle with translucent background
@@ -355,7 +360,7 @@ export function ZoneCanvas({
         const btnSize = 16;
         const offset = 4;
         const btnX = x2 - btnSize; // Aligned to right border (inside)
-        const btnY = y1 - offset - btnSize; // Outside top border
+        const btnY = adjustedY1 - offset - btnSize; // Outside top border (using adjusted position)
         
         // Draw square button background
         ctx.fillStyle = 'rgba(255, 59, 48, 0.95)';
@@ -458,49 +463,6 @@ export function ZoneCanvas({
     return null;
   };
 
-  const getResizeHandle = (x: number, y: number, zone: Zone): string | null => {
-    const { x1, y1, x2, y2 } = zone.bbox;
-    const edgeTolerance = 8; // Distance from edge to trigger resize
-    const cornerSize = 20; // Corner area size
-    
-    const nearLeft = Math.abs(x - x1) <= edgeTolerance;
-    const nearRight = Math.abs(x - x2) <= edgeTolerance;
-    const nearTop = Math.abs(y - y1) <= edgeTolerance;
-    const nearBottom = Math.abs(y - y2) <= edgeTolerance;
-    
-    const inHorizontal = x >= x1 - edgeTolerance && x <= x2 + edgeTolerance;
-    const inVertical = y >= y1 - edgeTolerance && y <= y2 + edgeTolerance;
-    
-    // Check corners first (priority over edges)
-    if (nearLeft && nearTop && x >= x1 - edgeTolerance && x <= x1 + cornerSize && y >= y1 - edgeTolerance && y <= y1 + cornerSize) {
-      return 'nw';
-    }
-    if (nearRight && nearTop && x >= x2 - cornerSize && x <= x2 + edgeTolerance && y >= y1 - edgeTolerance && y <= y1 + cornerSize) {
-      return 'ne';
-    }
-    if (nearLeft && nearBottom && x >= x1 - edgeTolerance && x <= x1 + cornerSize && y >= y2 - cornerSize && y <= y2 + edgeTolerance) {
-      return 'sw';
-    }
-    if (nearRight && nearBottom && x >= x2 - cornerSize && x <= x2 + edgeTolerance && y >= y2 - cornerSize && y <= y2 + edgeTolerance) {
-      return 'se';
-    }
-    
-    // Check edges (anywhere along the border)
-    if (nearTop && inHorizontal) {
-      return 'n';
-    }
-    if (nearBottom && inHorizontal) {
-      return 's';
-    }
-    if (nearLeft && inVertical) {
-      return 'w';
-    }
-    if (nearRight && inVertical) {
-      return 'e';
-    }
-
-    return null;
-  };
 
   const isDeleteButtonClicked = (x: number, y: number, zone: Zone): boolean => {
     // Delete button aligned to right border, outside top border
@@ -572,17 +534,25 @@ export function ZoneCanvas({
     if (clickedZone) {
       onZoneSelect(clickedZone.id);
       
-      // Check if a resize handle was clicked
-      const handle = getResizeHandle(x, y, clickedZone);
-      if (handle) {
-        setResizeHandle(handle);
-        setIsDraggingZone(true);
-        setIsDrawing(true); // Need this for mouse move to work
-      } else {
-        // Start dragging the zone
-        setIsDraggingZone(true);
-        setIsDrawing(true); // Need this for mouse move to work
-      }
+      // Check if we're starting a resize operation
+      const { x1, y1, x2, y2 } = clickedZone.bbox;
+      const edgeThreshold = 15;
+      const textAlignmentOffset = 2;
+      const adjustedY1 = y1 - textAlignmentOffset;
+      const adjustedY2 = y2 - textAlignmentOffset;
+      
+      const nearLeft = Math.abs(x - x1) < edgeThreshold;
+      const nearRight = Math.abs(x - x2) < edgeThreshold;
+      const nearTop = Math.abs(y - adjustedY1) < edgeThreshold;
+      const nearBottom = Math.abs(y - adjustedY2) < edgeThreshold;
+      
+      const isResizingOperation = nearLeft || nearRight || nearTop || nearBottom;
+      setIsResizing(isResizingOperation);
+      
+      // Start dragging the zone
+      setIsDraggingZone(true);
+      setIsDrawing(true);
+      setDragStart({ x, y });
     } else {
       // Click on empty space - start drawing rectangle for annotation
       onZoneSelect(null);
@@ -591,9 +561,6 @@ export function ZoneCanvas({
       setIsDrawingRectangle(true);
       setRectangleStart({ x, y });
     }
-    
-    setDragStart({ x, y });
-    setIsDrawing(true);
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -668,48 +635,54 @@ export function ZoneCanvas({
         hideCardTimeoutRef.current = null;
       }
       
-      setHoveredZoneForCard(hoveredZone);
-      const canvas = canvasRef.current;
-      const rect = canvas?.getBoundingClientRect();
-      if (rect && canvas) {
-        // Calculate proper scaling between canvas internal size and display size
-        const scaleX = rect.width / canvas.width;
-        const scaleY = rect.height / canvas.height;
-        
-        // Convert zone coordinates to screen coordinates
-        const screenX = rect.left + (hoveredZone.bbox.x2 * scaleX); // Use right edge (x2)
-        const boxTop = rect.top + (hoveredZone.bbox.y1 * scaleY); // Box top edge
-        const boxBottom = rect.top + (hoveredZone.bbox.y2 * scaleY); // Box bottom edge
-        const boxCenterY = (boxTop + boxBottom) / 2; // Center of the box
-        
-        // Set initial position with better card height estimate
-        const estimatedCardHeight = 160; // Better estimate based on CSS
-        const cardX = screenX + 10; // Start 10px to the right of right border (outside)
-        const cardY = boxCenterY - estimatedCardHeight; // Position card half size up from box center
-        
-        // Check viewport bounds
-        const viewportHeight = window.innerHeight;
-        let finalY = cardY;
-        
-        if (finalY + estimatedCardHeight > viewportHeight - 10) {
-          finalY = viewportHeight - estimatedCardHeight - 10;
+      // Only update card position if the hovered zone changed
+      if (hoveredZoneForCard?.id !== hoveredZone.id) {
+        setHoveredZoneForCard(hoveredZone);
+        const canvas = canvasRef.current;
+        const rect = canvas?.getBoundingClientRect();
+        if (rect && canvas) {
+          // Calculate proper scaling between canvas internal size and display size
+          const scaleX = rect.width / canvas.width;
+          const scaleY = rect.height / canvas.height;
+          
+          // Convert zone coordinates to screen coordinates
+          const screenX = rect.left + (hoveredZone.bbox.x2 * scaleX); // Use right edge (x2)
+          const boxTop = rect.top + (hoveredZone.bbox.y1 * scaleY); // Box top edge
+          const boxBottom = rect.top + (hoveredZone.bbox.y2 * scaleY); // Box bottom edge
+          const boxCenterY = (boxTop + boxBottom) / 2; // Center of the box
+          
+          // Set initial position with better card height estimate
+          const estimatedCardHeight = 120; // Reduced height estimate
+          const cardX = screenX + 10; // Start 10px to the right of right border (outside)
+          const cardY = boxTop; // Position card exactly at top border of zone box
+          
+          // Check viewport bounds - only adjust if really necessary
+          const viewportHeight = window.innerHeight;
+          let finalY = cardY;
+          
+          // Only push card up if it would go off the bottom of the screen
+          if (finalY + estimatedCardHeight > viewportHeight - 20) {
+            finalY = Math.max(10, viewportHeight - estimatedCardHeight - 20);
+          }
+          
+          // Ensure card doesn't go above the viewport
+          if (finalY < 10) {
+            finalY = 10;
+          }
+          
+          setCardPosition({
+            x: cardX,
+            y: finalY
+          });
         }
-        if (finalY < 10) {
-          finalY = 10;
-        }
+        // Set editing text to the specific zone's text
+        setEditingText(hoveredZone.text);
         
-        setCardPosition({
-          x: cardX,
-          y: finalY
-        });
+        // Calculate initial middle tolerance value
+        setTimeout(() => {
+          updateToleranceCalculation(hoveredZone);
+        }, 100); // Small delay to ensure inputs are rendered
       }
-      // Set editing text to the specific zone's text
-      setEditingText(hoveredZone.text);
-      
-      // Calculate initial middle tolerance value
-      setTimeout(() => {
-        updateToleranceCalculation(hoveredZone);
-      }, 100); // Small delay to ensure inputs are rendered
     } else if (!isHoveringCard) {
       // Only hide card if not hovering over the card itself
       if (hideCardTimeoutRef.current) {
@@ -725,13 +698,38 @@ export function ZoneCanvas({
     if (hoveringBubble) {
       setCursor('grab');
     } else if (hoveredZone && hoveredZone.id === selectedZoneId) {
-      const handle = getResizeHandle(x, y, hoveredZone);
-      if (handle) {
-        setCursor(getCursorForHandle(handle));
-      } else if (isDeleteButtonClicked(x, y, hoveredZone)) {
+      if (isDeleteButtonClicked(x, y, hoveredZone)) {
         setCursor('pointer');
       } else {
-        setCursor('move');
+        // Check for resize cursors when near edges
+        const { x1, y1, x2, y2 } = hoveredZone.bbox;
+        const edgeThreshold = 15;
+        
+        // Apply same alignment offset as drawing
+        const textAlignmentOffset = 2;
+        const adjustedY1 = y1 - textAlignmentOffset;
+        const adjustedY2 = y2 - textAlignmentOffset;
+        
+        const nearLeft = Math.abs(x - x1) < edgeThreshold;
+        const nearRight = Math.abs(x - x2) < edgeThreshold;
+        const nearTop = Math.abs(y - adjustedY1) < edgeThreshold;
+        const nearBottom = Math.abs(y - adjustedY2) < edgeThreshold;
+        
+        if (nearLeft && nearTop) {
+          setCursor('nw-resize');
+        } else if (nearRight && nearTop) {
+          setCursor('ne-resize');
+        } else if (nearLeft && nearBottom) {
+          setCursor('sw-resize');
+        } else if (nearRight && nearBottom) {
+          setCursor('se-resize');
+        } else if (nearLeft || nearRight) {
+          setCursor('ew-resize');
+        } else if (nearTop || nearBottom) {
+          setCursor('ns-resize');
+        } else {
+          setCursor('move');
+        }
       }
     } else if (hoveredZone) {
       setCursor('pointer');
@@ -777,100 +775,69 @@ export function ZoneCanvas({
         }
         
         let { x1, y1, x2, y2 } = selectedZone.bbox;
-
-        if (resizeHandle) {
-          // Resizing zone with handle
+        
+        if (isResizing) {
+          // Resize the zone based on initial click position
+          const edgeThreshold = 15;
+          const textAlignmentOffset = 2;
+          const adjustedY1 = y1 - textAlignmentOffset;
+          const adjustedY2 = y2 - textAlignmentOffset;
           
-          // Resize based on handle
-          if (resizeHandle.includes('n')) y1 += dy;
-          if (resizeHandle.includes('s')) y2 += dy;
-          if (resizeHandle.includes('w')) x1 += dx;
-          if (resizeHandle.includes('e')) x2 += dx;
-
-          // Ensure min size
-          if (x2 - x1 < 10) {
-            if (resizeHandle.includes('w')) x1 = x2 - 10;
-            if (resizeHandle.includes('e')) x2 = x1 + 10;
-          }
-          if (y2 - y1 < 10) {
-            if (resizeHandle.includes('n')) y1 = y2 - 10;
-            if (resizeHandle.includes('s')) y2 = y1 + 10;
-          }
+          // Check which edge was clicked initially (we need to store this)
+          const nearLeft = Math.abs(dragStart.x - x1) < edgeThreshold;
+          const nearRight = Math.abs(dragStart.x - x2) < edgeThreshold;
+          const nearTop = Math.abs(dragStart.y - adjustedY1) < edgeThreshold;
+          const nearBottom = Math.abs(dragStart.y - adjustedY2) < edgeThreshold;
           
-          // Bbox updated
+          // Resize based on which edge was clicked
+          if (nearLeft) x1 += dx;
+          if (nearRight) x2 += dx;
+          if (nearTop) y1 += dy;
+          if (nearBottom) y2 += dy;
+          
+          // Ensure minimum size
+          const minSize = 10;
+          if (x2 - x1 < minSize) {
+            if (nearLeft) x1 = x2 - minSize;
+            else x2 = x1 + minSize;
+          }
+          if (y2 - y1 < minSize) {
+            if (nearTop) y1 = y2 - minSize;
+            else y2 = y1 + minSize;
+          }
         } else {
-          // Move
+          // Move the zone
           x1 += dx;
           y1 += dy;
           x2 += dx;
           y2 += dy;
         }
 
-        // Update the zone data
-        onZoneUpdate(memoizedSelectedZoneId, {
-          bbox: {
-            ...selectedZone.bbox,
-            x1, y1, x2, y2,
-            width: x2 - x1,
-            height: y2 - y1,
-          },
+        // Store updates during drag - use local updates to prevent conflicts
+        setLocalZoneUpdates({
+          ...localZoneUpdates,
+          [memoizedSelectedZoneId]: {
+            bbox: {
+              ...selectedZone.bbox,
+              x1, y1, x2, y2,
+              width: x2 - x1,
+              height: y2 - y1,
+            }
+          }
         });
         
-        // Force immediate canvas redraw with updated coordinates
-        const canvas = canvasRef.current;
-        const img = imageRef.current;
-        if (canvas && img && imageLoaded) {
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            // Clear and redraw immediately
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0);
-            
-            // Draw all zones with updated selected zone
-            memoizedZones.forEach((zone) => {
-              let zoneBbox = zone.bbox;
-              if (zone.id === memoizedSelectedZoneId) {
-                // Use the new coordinates for the selected zone
-                zoneBbox = { x1, y1, x2, y2, width: x2 - x1, height: y2 - y1 };
-              }
-              
-              const { x1: bx1, y1: by1, x2: bx2, y2: by2 } = zoneBbox;
-              const isSelected = zone.id === memoizedSelectedZoneId;
-              const isHovered = zone.id === memoizedHoveredZoneId;
-              
-              // Draw zone box
-              ctx.strokeStyle = isSelected ? '#00FF00' : (isHovered ? '#FF8800' : '#0088FF');
-              ctx.lineWidth = isSelected ? 3 : 2;
-              ctx.strokeRect(bx1, by1, bx2 - bx1, by2 - by1);
-              
-              // Draw resize handles for selected zone
-              if (isSelected) {
-                const handleSize = 8;
-                ctx.fillStyle = '#00FF00';
-                
-                // Corner handles
-                ctx.fillRect(bx1 - handleSize/2, by1 - handleSize/2, handleSize, handleSize);
-                ctx.fillRect(bx2 - handleSize/2, by1 - handleSize/2, handleSize, handleSize);
-                ctx.fillRect(bx1 - handleSize/2, by2 - handleSize/2, handleSize, handleSize);
-                ctx.fillRect(bx2 - handleSize/2, by2 - handleSize/2, handleSize, handleSize);
-                
-                // Edge handles
-                ctx.fillRect((bx1 + bx2)/2 - handleSize/2, by1 - handleSize/2, handleSize, handleSize);
-                ctx.fillRect((bx1 + bx2)/2 - handleSize/2, by2 - handleSize/2, handleSize, handleSize);
-                ctx.fillRect(bx1 - handleSize/2, (by1 + by2)/2 - handleSize/2, handleSize, handleSize);
-                ctx.fillRect(bx2 - handleSize/2, (by1 + by2)/2 - handleSize/2, handleSize, handleSize);
-              }
-            });
-            
-            // Canvas redraw completed
-          }
-        }
+        // Update drag start position for next iteration
+        setDragStart({ x, y });
       }
-      setDragStart({ x, y });
     }
-  }, [memoizedZones, memoizedSelectedZoneId, isDrawing, dragStart, draggingBubble, isDrawingRectangle, rectangleStart, resizeHandle, onZoneUpdate, imageLoaded]);
+  }, [memoizedZones, memoizedSelectedZoneId, isDrawing, dragStart, draggingBubble, isDrawingRectangle, rectangleStart, onZoneUpdate, imageLoaded, localZoneUpdates, isResizing]);
 
   const handleMouseUp = () => {
+    // Apply local updates to actual zones before clearing
+    Object.entries(localZoneUpdates).forEach(([zoneId, updates]) => {
+      onZoneUpdate(zoneId, updates);
+    });
+    
     // Clear local updates when mouse is released
     setLocalZoneUpdates({});
     
@@ -899,11 +866,11 @@ export function ZoneCanvas({
     
     setIsDrawing(false);
     setDragStart(null);
-    setResizeHandle(null);
     setDraggingBubble(null);
     setIsDraggingZone(false);
     setIsDrawingRectangle(false);
     setRectangleStart(null);
+    setIsResizing(false);
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -944,7 +911,7 @@ export function ZoneCanvas({
         onDoubleClick={handleDoubleClick}
         style={{
           border: '1px solid #ccc',
-          cursor: isDrawing ? (draggingBubble ? 'grabbing' : resizeHandle ? cursor : 'grabbing') : cursor,
+          cursor: isDrawing ? (draggingBubble ? 'grabbing' : 'grabbing') : cursor,
           maxWidth: '100%',
           height: 'auto',
         }}
